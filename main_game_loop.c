@@ -1,32 +1,61 @@
+typedef struct Entity {
+	Vector2 size;
+	Vector2 position;
+	Vector2 velocity;
+	Vector4 color;
+	bool is_alive;
+} Entity;
+
+void setup_player(Entity* entity) {
+	entity->size = v2(100, 20);
+	entity->position = v2(0, -300);
+	entity->color = COLOR_WHITE;
+}
 
 int entry(int argc, char **argv) {
-	
-	// This is how we (optionally) configure the window.
-	// To see all the settable window properties, ctrl+f "struct Os_Window" in os_interface.c
-	window.title = STR("Minimal Game Example");
-	window.point_width = 2560/2;
-	window.point_height = 1440/2; 
-	window.x = 2560/4;
-	window.y = 1440/4;
-	window.clear_color = hex_to_rgba(0x2a2d3aff);
+	window.title = STR("Noel & Gustav - Pong Clone");
+	window.point_width = 300;
+	window.point_height = 500; 
+	window.x = 200;
+	window.y = 200;
+	window.clear_color = COLOR_BLACK; // Background color
+
 	float64 seconds_counter = 0.0;
 	s32 frame_count = 0;
 	float64 last_time = os_get_elapsed_seconds();
+
+	// Here we create the player entity object
+	struct Entity player;
+	setup_player(&player);
+	// --------------------------------
+
 	while (!window.should_close) {
 		reset_temporary_storage();
-		
+
+		// Time stuff
 		float64 now = os_get_elapsed_seconds();
 		float64 delta_t = now - last_time;
 		last_time = now;
-		Matrix4 rect_xform = m4_scalar(1.0);
-		rect_xform         = m4_rotate_z(rect_xform, (f32)now);
-		rect_xform         = m4_translate(rect_xform, v3(-125, -125, 0));
-		draw_rect_xform(rect_xform, v2(250, 250), v4(0.2, 0, 0.3, 0.5));
+
+		// main code loop here --------------
+		// Here we draw the player as a rectangle
+		{
+			Vector2 input_axis = v2(0, 0); // Create an empty 2-dim vector
+			if (is_key_down('A') && player.position.x > -window.point_width / 2 - player.size.x / 2) {
+				input_axis.x -= 1.0;
+			}
+			if (is_key_down('D') && player.position.x <  window.point_width / 2 - player.size.x / 2) {
+				input_axis.x += 1.0;
+			}
+			
+			input_axis = v2_normalize(input_axis);
+			player.position = v2_add(player.position, v2_mulf(input_axis, 500.0 * delta_t));
+		}
 		
-		draw_rect(v2(sin(now)*window.width*0.4-60, -60), v2(120, 120), v4(1, 0, 0, 0.5));
-		draw_rect(v2(-60, sin(now)*window.height*0.4-60), v2(120, 120), v4(0, 1, 0, 0.5));
-		draw_rect(v2(-sin(now)*window.width*0.4-60, -60), v2(120, 120), v4(0, 1, 0, 0.5));
-		draw_rect(v2(-60, -sin(now)*window.height*0.4-60), v2(120, 120), v4(1, 0, 0, 0.5));
+		draw_rect(player.position, player.size, player.color);
+		draw_circle(player.position, v2(5, 5), COLOR_RED); // Player position origin
+
+		// main code loop here --------------
 		os_update(); 
 		gfx_update();
 		seconds_counter += delta_t;
