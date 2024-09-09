@@ -39,7 +39,7 @@ void entity_destroy(Entity* entity) {
 }
 
 void setup_player(Entity* entity) {
-	entity->size = v2(100, 20);
+	entity->size = v2(50, 20);
 	entity->position = v2(0, -300);
 	entity->color = COLOR_WHITE;
 
@@ -50,7 +50,7 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
-	entity->velocity = v2(0, get_random_int_in_range(100, 200));
+	entity->velocity = v2(0, 200);
 
 	entity->is_projectile = true;
 }
@@ -100,6 +100,7 @@ int entry(int argc, char **argv) {
 
 	// game variables
 	int number_of_destroyed_obstacles = 0;
+	int number_of_shots_fired = 0;
 
 	// Here we create the player entity object
 	Entity* player = entity_create();
@@ -127,12 +128,28 @@ int entry(int argc, char **argv) {
 		// main code loop here --------------
 		if (player->is_valid)
 		{
-			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
+    // Hantera vänsterklick
+		if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
+		{
+			consume_key_just_pressed(MOUSE_BUTTON_LEFT);
+			Entity* projectile = entity_create();
+			setup_projectile(projectile, player);
+			number_of_shots_fired++;
+		}
+
+		/*
+		if (is_key_just_pressed(MOUSE_BUTTON_RIGHT)) 
+		{
+			consume_key_just_pressed(MOUSE_BUTTON_RIGHT);
+			
+			if (projectile)
 			{
-				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
-				Entity* projectile = entity_create();
-				setup_projectile(projectile, player);
+			projectile->is_projectile = false;
 			}
+		}
+		*/
+		
+
 
 			Vector2 input_axis = v2(0, 0); // Create an empty 2-dim vector
 			
@@ -200,8 +217,8 @@ int entry(int argc, char **argv) {
 			}
 		}
 
-		Vector2 text_position = player->position;
-		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, text_position, v2(0.7, 0.7), COLOR_RED);
+		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
+		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
 
 		// main code loop here --------------a
 		os_update(); 
