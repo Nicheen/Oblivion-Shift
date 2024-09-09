@@ -1,4 +1,8 @@
+// game variables
 #define MAX_ENTITY_COUNT 1024
+int number_of_destroyed_obstacles = 0;
+int number_of_shots_fired = 0;
+int number_of_shots_missed = 0;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
@@ -82,6 +86,23 @@ bool is_out_of_bounds(Entity* entity) {
             entity->position.y > window.height / 2);
 }
 
+void apply_damage(Entity* obstacle, int damage) {
+    obstacle->obstacle_health -= damage;
+    if (obstacle->obstacle_health <= 0) {
+		// Destroy the obstacle after its health is 0
+        entity_destroy(obstacle);
+        number_of_destroyed_obstacles += 1;
+    }
+}
+
+void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
+    int damage = 1; // This can be changes in the future
+    apply_damage(obstacle, damage);
+    
+    // Destroy the projectile after it hits the obstacle
+    entity_destroy(projectile);
+}
+
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 300;
@@ -97,10 +118,6 @@ int entry(int argc, char **argv) {
 	Gfx_Font *font = load_font_from_disk(STR("C:/Windows/Fonts/arial.ttf"), get_heap_allocator());
 	assert(font, "Failed loading arial.ttf");
 	const u32 font_height = 48;
-
-	// game variables
-	int number_of_destroyed_obstacles = 0;
-	int number_of_shots_fired = 0;
 
 	// Here we create the player entity object
 	Entity* player = entity_create();
@@ -128,28 +145,16 @@ int entry(int argc, char **argv) {
 		// main code loop here --------------
 		if (player->is_valid)
 		{
-    // Hantera vänsterklick
-		if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
-		{
-			consume_key_just_pressed(MOUSE_BUTTON_LEFT);
-			Entity* projectile = entity_create();
-			setup_projectile(projectile, player);
-			number_of_shots_fired++;
-		}
-
-		/*
-		if (is_key_just_pressed(MOUSE_BUTTON_RIGHT)) 
-		{
-			consume_key_just_pressed(MOUSE_BUTTON_RIGHT);
-			
-			if (projectile)
+			// Hantera vänsterklick
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
 			{
-			projectile->is_projectile = false;
-			}
-		}
-		*/
-		
+				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
+				Entity* projectile = entity_create();
+				setup_projectile(projectile, player);
+
+				number_of_shots_fired++;
+			}
 
 			Vector2 input_axis = v2(0, 0); // Create an empty 2-dim vector
 			
@@ -158,7 +163,7 @@ int entry(int argc, char **argv) {
 				input_axis.x -= 1.0;
 			}
 
-			if (is_key_down('D') && player->position.x <  window.point_width / 2 - player->size.x / 2)
+			if (is_key_down('D') && player->position.x <  window.point_width / 2 + player->size.x / 2)
 			{
 				input_axis.x += 1.0;
 			}
@@ -171,54 +176,56 @@ int entry(int argc, char **argv) {
 		int entity_counter = 0;
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 			Entity* entity = &entities[i];
-			if (entity->is_valid) { // Check if the entity is valid or not
-				entity_counter++;
+			if (!entity->is_valid) continue;
+			entity_counter++;
 
-				entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
-				if (entity->is_projectile) {
-					for (int j = 0; j < MAX_ENTITY_COUNT; j++) {
-						Entity* other_entity = &entities[j];
-						if (other_entity->is_obstacle) {
-							if (v2_dist(entity->position, other_entity->position) <= 0) {
-								other_entity->obstacle_health -= 2;
-								entity_destroy(entity);
-							} else if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x ) {
-								other_entity->obstacle_health -= 1;
-								entity_destroy(entity);
-							}
+			entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 
-							if (other_entity->obstacle_health <= 0) {
-								entity_destroy(other_entity);
-								number_of_destroyed_obstacles++;
-							}
-						}
+			if (entity->is_projectile) 
+			{
+				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
+				{
+					Entity* other_entity = &entities[j];
+					if (other_entity->is_obstacle) 
+					{
+						if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x) 
+						{
+							handle_projectile_collision(entity, other_entity);
+                    		break; // Exit after handling the first collision
+						} 
 					}
 				}
-				
-				// TODO fix this below
-				if (is_out_of_bounds(entity) && entity->is_projectile)
-				{
-					entity_destroy(entity);
-				}
+			}
+			
+			// TODO fix this below
+			if (is_out_of_bounds(entity) && entity->is_projectile)
+			{
+				number_of_shots_missed++;
+				entity_destroy(entity);
+			}
 
-				if (entity->is_projectile) 
-				{
-					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-					draw_circle(draw_position, entity->size, entity->color);
-				}
+			if (entity->is_projectile) 
+			{
+				Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+				draw_circle(draw_position, entity->size, entity->color);
+			}
 
-				if (entity->is_player || entity->is_obstacle) 
-				{
-					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-					draw_rect(draw_position, entity->size, entity->color);
-					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
-					draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN);
-				}
+			if (entity->is_player || entity->is_obstacle) 
+			{
+				Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+				draw_rect(draw_position, entity->size, entity->color);
+				Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
+				draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN);
 			}
 		}
 
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
+		
+		if (number_of_shots_missed >= 3) 
+		{
+			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
+		}
 
 		// main code loop here --------------a
 		os_update(); 
