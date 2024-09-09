@@ -14,6 +14,7 @@ typedef struct Entity {
 	bool is_obstacle;
 	bool is_projectile;
 	bool is_player;
+	int obstacle_health;
 } Entity;
 
 // A list to hold all the entities
@@ -47,7 +48,7 @@ void setup_player(Entity* entity) {
 
 void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
-	entity->position = v2(player->position.x + player->size.x / 2, player->position.y + player->size.y);
+	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
 	entity->velocity = v2(0, get_random_int_in_range(100, 200));
 
@@ -60,6 +61,16 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->size = v2(size, size);
 	entity->position = v2(x_index*(size + padding) - 190, y_index*(size + padding) - 100);
 	entity->color = v4(1, 0, 0, 1);
+	
+	if (get_random_float64_in_range(0, 1) <= 0.10) 
+	{
+		entity->obstacle_health = 2;
+		entity->size = v2(30, 30);
+	} 
+	else 
+	{
+		entity->obstacle_health = 1;
+	}
 
 	entity->is_obstacle = true;
 }
@@ -151,9 +162,16 @@ int entry(int argc, char **argv) {
 					for (int j = 0; j < MAX_ENTITY_COUNT; j++) {
 						Entity* other_entity = &entities[j];
 						if (other_entity->is_obstacle) {
-							if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x) {
-								entity_destroy(other_entity);
+							if (v2_dist(entity->position, other_entity->position) <= 0) {
+								other_entity->obstacle_health -= 2;
 								entity_destroy(entity);
+							} else if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x ) {
+								other_entity->obstacle_health -= 1;
+								entity_destroy(entity);
+							}
+
+							if (other_entity->obstacle_health <= 0) {
+								entity_destroy(other_entity);
 								number_of_destroyed_obstacles++;
 							}
 						}
@@ -161,19 +179,23 @@ int entry(int argc, char **argv) {
 				}
 				
 				// TODO fix this below
-				if (is_out_of_bounds(entity) && entity->is_projectile) 
+				if (is_out_of_bounds(entity) && entity->is_projectile)
 				{
 					entity_destroy(entity);
 				}
 
 				if (entity->is_projectile) 
 				{
-					draw_circle(entity->position, entity->size, entity->color);
+					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+					draw_circle(draw_position, entity->size, entity->color);
 				}
 
 				if (entity->is_player || entity->is_obstacle) 
 				{
-					draw_rect(entity->position, entity->size, entity->color);
+					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+					draw_rect(draw_position, entity->size, entity->color);
+					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
+					draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN);
 				}
 			}
 		}
