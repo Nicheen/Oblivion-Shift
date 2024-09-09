@@ -1,13 +1,21 @@
 #define MAX_ENTITY_COUNT 1024
 
+inline float v2_dist(Vector2 a, Vector2 b) {
+    return v2_length(v2_sub(a, b));
+}
+
 typedef struct Entity {
 	Vector2 size;
 	Vector2 position;
 	Vector2 velocity;
 	Vector4 color;
-	bool is_circle;
 	bool is_valid;
+	// Entity Type Below
+	bool is_obstacle;
+	bool is_projectile;
+	bool is_player;
 } Entity;
+
 // A list to hold all the entities
 Entity entities[MAX_ENTITY_COUNT];
 
@@ -33,14 +41,34 @@ void setup_player(Entity* entity) {
 	entity->size = v2(100, 20);
 	entity->position = v2(0, -300);
 	entity->color = COLOR_WHITE;
+
+	entity->is_player = true;
 }
 
 void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = v2(player->position.x + player->size.x / 2, player->position.y + player->size.y);
 	entity->color = v4(0, 1, 0, 1); // Green color
-	entity->is_circle = true;
 	entity->velocity = v2(0, get_random_int_in_range(100, 200));
+
+	entity->is_projectile = true;
+}
+
+void setup_obstacle(Entity* entity, int x_index, int y_index) {
+	int size = 20;
+	int padding = 10;
+	entity->size = v2(size, size);
+	entity->position = v2(x_index*(size + padding) - 190, y_index*(size + padding) - 100);
+	entity->color = v4(1, 0, 0, 1);
+
+	entity->is_obstacle = true;
+}
+
+bool is_out_of_bounds(Entity* entity) {
+    return (entity->position.x < -window.width / 2 || 
+            entity->position.x > window.width / 2 || 
+            entity->position.y < -window.height / 2 || 
+            entity->position.y > window.height / 2);
 }
 
 int entry(int argc, char **argv) {
@@ -54,15 +82,29 @@ int entry(int argc, char **argv) {
 	float64 seconds_counter = 0.0;
 	s32 frame_count = 0;
 	float64 last_time = os_get_elapsed_seconds();
+	
+	Gfx_Font *font = load_font_from_disk(STR("C:/Windows/Fonts/arial.ttf"), get_heap_allocator());
+	assert(font, "Failed loading arial.ttf");
+	const u32 font_height = 48;
+
+	// game variables
+	int number_of_destroyed_obstacles = 0;
 
 	// Here we create the player entity object
 	Entity* player = entity_create();
 	setup_player(player);
 
-	
+	for (int i = 0; i < 13; i++) { // x
+		for (int j = 0; j < 14; j++) { // y
+			Entity* entity = entity_create();
+			setup_obstacle(entity, i, j);
+			float red = 1 - (float)(i+1) / 13;
+			float blue = (float)(i+1) / 13;
+			entity->color = v4(red, 0, blue, 1);
+		}
+	}
 
 	// --------------------------------
-
 	while (!window.should_close) {
 		reset_temporary_storage();
 
@@ -102,21 +144,43 @@ int entry(int argc, char **argv) {
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 			Entity* entity = &entities[i];
 			if (entity->is_valid) { // Check if the entity is valid or not
-				entity_counter += 1;
-				entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
+				entity_counter++;
 
-				if (entity->position.y > window.height) {
+				entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
+				if (entity->is_projectile) {
+					for (int j = 0; j < MAX_ENTITY_COUNT; j++) {
+						Entity* other_entity = &entities[j];
+						if (other_entity->is_obstacle) {
+							if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x) {
+								entity_destroy(other_entity);
+								entity_destroy(entity);
+								number_of_destroyed_obstacles++;
+							}
+						}
+					}
+				}
+				
+				// TODO fix this below
+				if (is_out_of_bounds(entity) && entity->is_projectile) 
+				{
 					entity_destroy(entity);
 				}
 
-				if (entity->is_circle) {
+				if (entity->is_projectile) 
+				{
 					draw_circle(entity->position, entity->size, entity->color);
-				} else {
+				}
+
+				if (entity->is_player || entity->is_obstacle) 
+				{
 					draw_rect(entity->position, entity->size, entity->color);
 				}
 			}
 		}
-		
+
+		Vector2 text_position = player->position;
+		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, text_position, v2(0.7, 0.7), COLOR_RED);
+
 		// main code loop here --------------a
 		os_update(); 
 		gfx_update();
