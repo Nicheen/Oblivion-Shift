@@ -3,6 +3,7 @@
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
+int number_of_power_ups = 0;
 bool debug_mode = false;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
@@ -24,6 +25,8 @@ typedef struct Entity {
 	int obstacle_health;
 	// Projectile
 	bool is_projectile;
+	// Power UP
+	bool is_power_up;
 } Entity;
 
 // A list to hold all the entities
@@ -85,6 +88,13 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->is_obstacle = true;
 }
 
+void setup_power_up(Entity* entity) {
+	entity->size = v2(15, 15);
+	entity->position = v2(0, 0);
+	entity->color = v4(0, 0, 1, 1);
+	entity->is_power_up = true;
+	number_of_power_ups++;
+}
 bool is_out_of_bounds(Entity* entity) {
     return (entity->position.x < -window.width / 2 || 
             entity->position.x > window.width / 2 || 
@@ -162,7 +172,7 @@ int entry(int argc, char **argv) {
 		if (player->is_valid && number_of_shots_missed < 3)
 		{
 			// Hantera vänsterklick
-			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
 			{
 				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
@@ -172,14 +182,19 @@ int entry(int argc, char **argv) {
 				number_of_shots_fired++;
 			}
 
+			if (number_of_destroyed_obstacles == 10 && number_of_power_ups == 0){
+				Entity* power_up = entity_create();
+				setup_power_up(power_up);
+			}
+
 			Vector2 input_axis = v2(0, 0); // Create an empty 2-dim vector
 			
-			if (is_key_down('A') && player->position.x > -window.point_width / 2 - player->size.x / 2)
+			if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->position.x > -window.point_width / 2 - player->size.x / 2)
 			{
 				input_axis.x -= 1.0;
 			}
 
-			if (is_key_down('D') && player->position.x <  window.point_width / 2 + player->size.x / 2)
+			if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->position.x <  window.point_width / 2 + player->size.x / 2)
 			{
 				input_axis.x += 1.0;
 			}
