@@ -5,6 +5,7 @@ int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
 bool debug_mode = false;
+bool game_over = false;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
@@ -111,12 +112,34 @@ void apply_damage(Entity* obstacle, int damage) {
     }
 }
 
+bool collisionDetection(Entity* projectile, Entity* obstacle) {
+	Vector2 distance = v2_sub(projectile->position, obstacle->position);
+	float dist_x = fabsf(distance.x);
+	float dist_y = fabsf(distance.y);
+
+	if (dist_x > (obstacle->size.x / 2.0f + projectile->size.x / 2.0f)) { return false; }
+	if (dist_y > (obstacle->size.y / 2.0f + projectile->size.y / 2.0f)) { return false; }
+
+	if (dist_x <= (obstacle->size.x / 2.0f)) { return true; }
+	if (dist_y <= (obstacle->size.y / 2.0f)) { return true; }
+
+	float dx = dist_x - obstacle->size.x / 2.0f;
+	float dy = dist_y - obstacle->size.y / 2.0f;
+	return (dx*dx+dy*dy <= projectile->size.x*projectile->size.y);
+}
+
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
     int damage = 1; // This can be changes in the future
     apply_damage(obstacle, damage);
     
     // Destroy the projectile after it hits the obstacle
     entity_destroy(projectile);
+}
+
+void reset_values() {
+	number_of_destroyed_obstacles = 0;
+	number_of_shots_fired = 0;
+	number_of_shots_missed = 0;
 }
 
 int entry(int argc, char **argv) {
@@ -169,7 +192,11 @@ int entry(int argc, char **argv) {
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
 
-		if (player->is_valid && number_of_shots_missed < 3)
+		if (is_key_just_pressed(KEY_ESCAPE) && game_over) {
+			reset_values();
+		}
+
+		if (player->is_valid || game_over)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
@@ -219,7 +246,7 @@ int entry(int argc, char **argv) {
 					Entity* other_entity = &entities[j];
 					if (other_entity->is_obstacle) 
 					{
-						if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x) 
+						if (collisionDetection(entity, other_entity)) 
 						{
 							handle_projectile_collision(entity, other_entity);
                     		break; // Exit after handling the first collision
@@ -253,8 +280,10 @@ int entry(int argc, char **argv) {
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
 
-		if (number_of_shots_missed >= 3) 
-		{
+		// Check if game is over or not
+		game_over = number_of_shots_missed >= 3;
+
+		if (game_over) {
 			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
 		}
 
