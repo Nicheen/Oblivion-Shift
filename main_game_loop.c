@@ -125,6 +125,8 @@ int entry(int argc, char **argv) {
 	assert(font, "Failed loading arial.ttf");
 	const u32 font_height = 48;
 
+	Gfx_Image* heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
+	
 	// Here we create the player entity object
 	Entity* player = entity_create();
 	setup_player(player);
@@ -157,7 +159,7 @@ int entry(int argc, char **argv) {
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
 
-		if (player->is_valid)
+		if (player->is_valid && number_of_shots_missed < 3)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
@@ -241,6 +243,14 @@ int entry(int argc, char **argv) {
 			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
 		}
 
+		for (int i = 0; i < max(3 - number_of_shots_missed, 0); i++) {
+			int heart_size = 30;
+			int heart_padding = 10;
+			Vector2 heart_position = v2(0, -window.height / 2);
+			heart_position = v2_add(heart_position, v2((heart_size + heart_padding)*i, 0));
+			draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
+		}
+		
 		// main code loop here --------------a
 		os_update(); 
 		gfx_update();
