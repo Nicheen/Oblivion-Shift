@@ -4,6 +4,7 @@ int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 bool debug_mode = false;
+bool game_over = false;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
@@ -109,6 +110,12 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
     entity_destroy(projectile);
 }
 
+void reset_values() {
+	number_of_destroyed_obstacles = 0;
+	number_of_shots_fired = 0;
+	number_of_shots_missed = 0;
+}
+
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 300;
@@ -159,7 +166,11 @@ int entry(int argc, char **argv) {
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
 
-		if (player->is_valid && number_of_shots_missed < 3)
+		if (is_key_just_pressed(KEY_ESCAPE) && game_over) {
+			reset_values();
+		}
+
+		if (player->is_valid || game_over)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
@@ -238,8 +249,10 @@ int entry(int argc, char **argv) {
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
 
-		if (number_of_shots_missed >= 3) 
-		{
+		// Check if game is over or not
+		game_over = number_of_shots_missed >= 3;
+
+		if (game_over) {
 			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
 		}
 
