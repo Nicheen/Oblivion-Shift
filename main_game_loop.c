@@ -102,7 +102,7 @@ void apply_damage(Entity* obstacle, int damage) {
     }
 }
 
-bool collisionDetection(Entity* projectile, Entity* obstacle) {
+bool circle_rect_collision(Entity* circle, Entity* rect) {
 	Vector2 distance = v2_sub(projectile->position, obstacle->position);
 	float dist_x = fabsf(distance.x);
 	float dist_y = fabsf(distance.y);
@@ -231,7 +231,7 @@ int entry(int argc, char **argv) {
 					Entity* other_entity = &entities[j];
 					if (other_entity->is_obstacle) 
 					{
-						if (collisionDetection(entity, other_entity)) 
+						if (circle_rect_collision(entity, other_entity)) 
 						{
 							handle_projectile_collision(entity, other_entity);
                     		break; // Exit after handling the first collision
