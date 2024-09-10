@@ -154,11 +154,7 @@ int entry(int argc, char **argv) {
 		if (is_key_just_pressed(KEY_TAB)) 
 		{
 			consume_key_just_pressed(KEY_TAB);
-			if (debug_mode == false) {
-				debug_mode = true; 
-			} else {
-				debug_mode = false;
-			}
+			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
 
 		if (player->is_valid)
