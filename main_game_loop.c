@@ -3,22 +3,27 @@
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
+bool debug_mode = false;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
 }
 
 typedef struct Entity {
+	// --- Entity Attributes ---
 	Vector2 size;
 	Vector2 position;
 	Vector2 velocity;
 	Vector4 color;
 	bool is_valid;
-	// Entity Type Below
-	bool is_obstacle;
-	bool is_projectile;
+	// --- Entity Type Below ---
+	// Player
 	bool is_player;
+	// Obstacle
+	bool is_obstacle;
 	int obstacle_health;
+	// Projectile
+	bool is_projectile;
 } Entity;
 
 // A list to hold all the entities
@@ -63,7 +68,8 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	int size = 20;
 	int padding = 10;
 	entity->size = v2(size, size);
-	entity->position = v2(x_index*(size + padding) - 190, y_index*(size + padding) - 100);
+	entity->position = v2(-180, -45);
+	entity->position = v2_add(entity->position, v2(x_index*(size + padding), y_index*(size + padding)));
 	entity->color = v4(1, 0, 0, 1);
 	
 	if (get_random_float64_in_range(0, 1) <= 0.10) 
@@ -123,12 +129,14 @@ int entry(int argc, char **argv) {
 	Entity* player = entity_create();
 	setup_player(player);
 
-	for (int i = 0; i < 13; i++) { // x
-		for (int j = 0; j < 14; j++) { // y
+	int rows_obstacles = 13;
+	int columns_obstacles = 13;
+	for (int i = 0; i < rows_obstacles; i++) { // x
+		for (int j = 0; j < columns_obstacles; j++) { // y
 			Entity* entity = entity_create();
 			setup_obstacle(entity, i, j);
-			float red = 1 - (float)(i+1) / 13;
-			float blue = (float)(i+1) / 13;
+			float red = 1 - (float)(i+1) / rows_obstacles;
+			float blue = (float)(i+1) / rows_obstacles;
 			entity->color = v4(red, 0, blue, 1);
 		}
 	}
@@ -143,6 +151,16 @@ int entry(int argc, char **argv) {
 		last_time = now;
 
 		// main code loop here --------------
+		if (is_key_just_pressed(KEY_TAB)) 
+		{
+			consume_key_just_pressed(KEY_TAB);
+			if (debug_mode == false) {
+				debug_mode = true; 
+			} else {
+				debug_mode = false;
+			}
+		}
+
 		if (player->is_valid)
 		{
 			// Hantera vänsterklick
@@ -215,13 +233,13 @@ int entry(int argc, char **argv) {
 				Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 				draw_rect(draw_position, entity->size, entity->color);
 				Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
-				draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN);
+				if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
 			}
 		}
 
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
-		
+
 		if (number_of_shots_missed >= 3) 
 		{
 			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
