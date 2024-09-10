@@ -102,6 +102,22 @@ void apply_damage(Entity* obstacle, int damage) {
     }
 }
 
+bool collisionDetection(Entity* projectile, Entity* obstacle) {
+	Vector2 distance = v2_sub(projectile->position, obstacle->position);
+	float dist_x = fabsf(distance.x);
+	float dist_y = fabsf(distance.y);
+
+	if (dist_x > (obstacle->size.x / 2.0f + projectile->size.x / 2.0f)) { return false; }
+	if (dist_y > (obstacle->size.y / 2.0f + projectile->size.y / 2.0f)) { return false; }
+
+	if (dist_x <= (obstacle->size.x / 2.0f)) { return true; }
+	if (dist_y <= (obstacle->size.y / 2.0f)) { return true; }
+
+	float dx = dist_x - obstacle->size.x / 2.0f;
+	float dy = dist_y - obstacle->size.y / 2.0f;
+	return (dx*dx+dy*dy <= projectile->size.x*projectile->size.y);
+}
+
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
     int damage = 1; // This can be changes in the future
     apply_damage(obstacle, damage);
@@ -215,7 +231,7 @@ int entry(int argc, char **argv) {
 					Entity* other_entity = &entities[j];
 					if (other_entity->is_obstacle) 
 					{
-						if (v2_dist(entity->position, other_entity->position) <= other_entity->size.x) 
+						if (collisionDetection(entity, other_entity)) 
 						{
 							handle_projectile_collision(entity, other_entity);
                     		break; // Exit after handling the first collision
