@@ -7,6 +7,7 @@ int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
 float projectile_speed = 500;
+int number_of_hearts = 3;
 bool debug_mode = false;
 bool game_over = false;
 Vector2 mouse_position;
@@ -35,10 +36,10 @@ Vector2 screen_to_world() {
 }
 
 typedef enum ObstacleType {
-	NIL_obstacle,
-	BASE_obstacle,
-	HARD_obstacle,
-	BLOCK_obstacle,
+	NIL_obstacle = 0,
+	BASE_obstacle = 1,
+	HARD_obstacle = 2,
+	BLOCK_obstacle = 3,
 	MAX_obstacle,
 } ObstacleType;
 
@@ -95,18 +96,19 @@ void setup_player(Entity* entity) {
 }
 
 void setup_projectile(Entity* entity, Entity* player) {
+	int setup_y_offset = 30;
 	entity->size = v2(10, 10);
-	entity->position = v2_add(player->position, v2(0, 30));
+	entity->position = v2_add(player->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
-	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, player->position));
+	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->position.x, player->position.y + setup_y_offset)));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
 
 	entity->is_projectile = true;
 }
 
 void setup_power_up(Entity* entity) {
-	entity->size = v2(15, 15);
-	//entity->position = v2(get_random_int_in_range(10 - window.width/2, -10 + window.width/2), -100);
+	int size = 25;
+	entity->size = v2(size, size);
 	entity->color = v4(0, 0, 1, 1);
 	entity->obstacle_health = 1;
 	entity->is_power_up = true;
@@ -158,12 +160,12 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
 	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
 	{
-		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -10 * delta_t));
+		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t));
 		projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 	} 
 	else 
 	{
-		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -10 * delta_t)); // go back 
+		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t)); // go back 
 		projectile->velocity = v2_mul(projectile->velocity, v2( 1, -1)); // Bounce y-axis
 	}
 }
@@ -214,7 +216,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
 
-	if (obstacle->obstacle_type == BASE_obstacle || obstacle->obstacle_type == HARD_obstacle) { 
+	if (obstacle->obstacle_type == BASE_obstacle || obstacle->obstacle_type == HARD_obstacle || obstacle->is_power_up) { 
 		apply_damage(obstacle, damage);
 	}
 	
@@ -222,7 +224,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	{
 		projectile_bounce(projectile, obstacle);
 	} 
-	else 
+	else
 	{
 		entity_destroy(projectile);
 	}
@@ -378,12 +380,11 @@ int entry(int argc, char **argv) {
 			
 			
 			{ // Draw The Entity
-				
+				float64 t = os_get_elapsed_seconds();
 				if (entity->is_projectile || entity->is_power_up) 
 				{
 					
 					if(entity->is_power_up){
-						float t = os_get_elapsed_seconds();
 						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);	
 						//log("%i %i", entity->position.x, entity->position.y);
 					}
@@ -399,41 +400,38 @@ int entry(int argc, char **argv) {
 						switch(entity->obstacle_type) 
 						{
 							case(HARD_obstacle):
-								float r = 0.5 * sin(os_get_elapsed_seconds() + 3*PI32) + 0.5;
+								float r = 0.5 * sin(t + 3*PI32) + 0.5;
 								entity->color = v4(r, 0, 1, 1);
 								break;
 							case(BLOCK_obstacle):
-								float a = 0.5 * sin(os_get_elapsed_seconds()) + 0.5;
+								float a = 0.3 * sin(2*t) + 0.7;
 								entity->color = v4(0.2, 0.2, 0.2, a);
 								break;
 							default: break;
-						}
-						
+						}				
 					}
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_rect(draw_position, entity->size, entity->color);
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
 					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
 				}
-
 			}
-			
 		}
 
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
 
 		// Check if game is over or not
-		game_over = number_of_shots_missed >= 3;
+		game_over = number_of_shots_missed >= number_of_hearts;
 
 		if (game_over) {
 			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-window.width / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
 		}
 
-		for (int i = 0; i < max(3 - number_of_shots_missed, 0); i++) {
-			int heart_size = 30;
-			int heart_padding = 10;
-			Vector2 heart_position = v2(0, -window.height / 2);
+		int heart_size = 30;
+		int heart_padding = 10;
+		for (int i = 0; i < max(number_of_hearts - number_of_shots_missed, 0); i++) {
+			Vector2 heart_position = v2(window.width / 2 - (heart_size+heart_padding)*number_of_hearts, heart_size - window.height / 2);
 			heart_position = v2_add(heart_position, v2((heart_size + heart_padding)*i, 0));
 			draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
 		}
@@ -444,7 +442,8 @@ int entry(int argc, char **argv) {
 		}
 
 		float wave = 15*(sin(now) + 1);
-		draw_line(v2(-window.width / 2, window.height / 2), v2(window.width / 2, window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
+		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
+		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
 		
 		// main code loop here --------------a
 		os_update(); 
