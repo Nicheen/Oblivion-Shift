@@ -116,19 +116,30 @@ void setup_power_up(Entity* entity) {
 	number_of_power_ups++;
 }
 
-void projectile_bounce(Entity* entity) {
-	entity->velocity = v2_mul(entity->velocity, v2(-1, 1));
+void projectile_bounce(Entity* projectile, Entity* obstacle) {
+	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
+	if (pos_diff.x > pos_diff.y) 
+	{
+		projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
+	} 
+	else 
+	{
+		projectile->velocity = v2_mul(projectile->velocity, v2( 1, -1)); // Bounce y-axis
+	}
 }
 
-bool apply_damage(Entity* obstacle, int damage) {
+void projectile_bounce_world(Entity* projectile) {
+	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
+}
+
+void apply_damage(Entity* obstacle, float damage) {
     obstacle->obstacle_health -= damage;
+
     if (obstacle->obstacle_health <= 0) {
 		// Destroy the obstacle after its health is 0
         entity_destroy(obstacle);
         number_of_destroyed_obstacles += 1;
-		return true;
     }
-	return false;
 }
 
 bool circle_rect_collision(Entity* circle, Entity* rect) {
@@ -148,18 +159,10 @@ bool circle_rect_collision(Entity* circle, Entity* rect) {
 }
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
-    int damage = 1; // This can be changes in the future
-    bool obstacle_destroyed = apply_damage(obstacle, damage);
-    
-	if (obstacle_destroyed) 
-	{
-		entity_destroy(projectile);
-	} 
-	else // Bounce the projectile if the obstacle isent destroyed immediately
-	{
-		projectile_bounce(projectile);
-	}
-    
+    int damage = 1.0f; // This can be changes in the future
+	apply_damage(obstacle, damage);
+
+	entity_destroy(projectile);
 }
 
 void reset_values() {
@@ -285,13 +288,13 @@ int entry(int argc, char **argv) {
 					}
 				}
 				// If projectile bounce on the sides
-				if (entity->position.x <= -window.width / 2 || entity->position.x >= window.width / 2)
+				if (entity->position.x <=  -window.width / 2 || entity->position.x >=  window.width / 2)
 				{
-					projectile_bounce(entity);
+					projectile_bounce_world(entity);
 				}
 
-				// If projectile exit
-				if (entity->position.y >= window.height / 2)
+				// If projectile exit up or down
+				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2 )
 				{
 					number_of_shots_missed++;
 					entity_destroy(entity);
