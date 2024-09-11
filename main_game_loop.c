@@ -4,6 +4,7 @@ int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
+float projectile_speed = 500;
 bool debug_mode = false;
 bool game_over = false;
 Vector2 mouse_position;
@@ -82,7 +83,7 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
-	entity->velocity = v2_sub(mouse_position, player->position);
+	entity->velocity = v2_mulf(v2_normalize(v2_sub(mouse_position, player->position)), projectile_speed);
 
 	entity->is_projectile = true;
 }
@@ -342,6 +343,9 @@ int entry(int argc, char **argv) {
 		{
 			draw_line(player->position, mouse_position, 2.0f, COLOR_WHITE);
 		}
+
+		float wave = 15*(sin(now) + 1);
+		draw_line(v2(-window.width / 2, window.height / 2), v2(window.width / 2, window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
 		
 		// main code loop here --------------a
 		os_update(); 
