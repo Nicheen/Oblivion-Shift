@@ -104,6 +104,15 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->is_projectile = true;
 }
 
+void setup_power_up(Entity* entity) {
+	entity->size = v2(15, 15);
+	//entity->position = v2(get_random_int_in_range(10 - window.width/2, -10 + window.width/2), -100);
+	entity->color = v4(0, 0, 1, 1);
+	entity->obstacle_health = 1;
+	entity->is_power_up = true;
+	number_of_power_ups++;
+}
+
 void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	int size = 20;
 	int padding = 10;
@@ -140,13 +149,6 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	entity->is_obstacle = true;
 }
 
-void setup_power_up(Entity* entity) {
-	entity->size = v2(15, 15);
-	entity->position = v2(0, 0);
-	entity->color = v4(0, 0, 1, 1);
-	entity->is_power_up = true;
-	number_of_power_ups++;
-}
 
 // TODO: implement projectile_bounce for obstacles with health > 1
 // Problem arises with calculating damage when projectile survives
@@ -197,6 +199,17 @@ bool circle_rect_collision(Entity* circle, Entity* rect) {
 	return (dx*dx+dy*dy <= circle->size.x*circle->size.y);
 }
 
+bool circle_circle_collision(Entity* circle1, Entity* circle2) {
+    // Calculate the distance between the centers of the two circles
+    Vector2 distance = v2_sub(circle1->position, circle2->position);
+    float dist_squared = distance.x * distance.x + distance.y * distance.y;
+
+    // Get the sum of the radii
+    float radius_sum = (circle1->size.x / 2.0f) + (circle2->size.x / 2.0f);  // Assuming size.x is the diameter
+
+    // Compare squared distance to squared radii sum (to avoid unnecessary sqrt calculation)
+    return dist_squared <= radius_sum * radius_sum;
+}
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
@@ -259,6 +272,7 @@ int entry(int argc, char **argv) {
 	}
 
 	// --------------------------------
+	float random_position_power_up = get_random_int_in_range(-10, 10);
 	while (!window.should_close) {
 		reset_temporary_storage();
 
@@ -294,7 +308,7 @@ int entry(int argc, char **argv) {
 				number_of_shots_fired++;
 			}
 
-			if (number_of_destroyed_obstacles == 10 && number_of_power_ups == 0){
+			if (number_of_destroyed_obstacles % 20 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
 				Entity* power_up = entity_create();
 				setup_power_up(power_up);
 			}
@@ -337,6 +351,16 @@ int entry(int argc, char **argv) {
                     		break; // Exit after handling the first collision
 						} 
 					}
+					if (other_entity->is_power_up)
+					{
+						if (circle_circle_collision(entity, other_entity)) 
+						{
+							handle_projectile_collision(entity, other_entity);
+							number_of_power_ups--;
+                    		break; // Exit after handling the first collision
+						}
+					} 
+					
 				}
 				// If projectile bounce on the sides
 				if (entity->position.x <=  -window.width / 2 || entity->position.x >=  window.width / 2)
@@ -354,10 +378,18 @@ int entry(int argc, char **argv) {
 			
 			
 			{ // Draw The Entity
-				if (entity->is_projectile) 
+				
+				if (entity->is_projectile || entity->is_power_up) 
 				{
+					
+					if(entity->is_power_up){
+						float t = os_get_elapsed_seconds();
+						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);	
+						//log("%i %i", entity->position.x, entity->position.y);
+					}
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_circle(draw_position, entity->size, entity->color);
+
 				}
 
 				if (entity->is_player || entity->is_obstacle) 
@@ -383,6 +415,7 @@ int entry(int argc, char **argv) {
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
 					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
 				}
+
 			}
 			
 		}
