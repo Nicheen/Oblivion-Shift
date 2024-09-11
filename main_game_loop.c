@@ -6,9 +6,28 @@ int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
 bool debug_mode = false;
 bool game_over = false;
+Vector2 mouse_position;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
+}
+
+Vector2 screen_to_world() {
+	float mouseX = input_frame.mouse_x;
+	float mouseY = input_frame.mouse_y;
+	Matrix4 proj = draw_frame.projection;
+	Matrix4 view = draw_frame.camera_xform;
+	float window_w = window.width;
+	float window_h = window.height;
+
+	float ndc_x = (mouseX / (window_w * 0.5f)) - 1.0f;
+	float ndc_y = (mouseY / (window_h * 0.5f)) - 1.0f;
+
+	// Transform to world coordinates
+	Vector4 world_pos = v4(ndc_x, ndc_y, 0, 1);
+	world_pos = m4_transform(m4_inverse(proj), world_pos);
+	world_pos = m4_transform(view, world_pos);
+	return (Vector2){world_pos.x, world_pos.y};
 }
 
 typedef struct Entity {
@@ -63,7 +82,7 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
-	entity->velocity = v2(0, 200);
+	entity->velocity = v2_sub(mouse_position, player->position);
 
 	entity->is_projectile = true;
 }
@@ -96,20 +115,20 @@ void setup_power_up(Entity* entity) {
 	entity->is_power_up = true;
 	number_of_power_ups++;
 }
-bool is_out_of_bounds(Entity* entity) {
-    return (entity->position.x < -window.width / 2 || 
-            entity->position.x > window.width / 2 || 
-            entity->position.y < -window.height / 2 || 
-            entity->position.y > window.height / 2);
+
+void projectile_bounce(Entity* entity) {
+	entity->velocity = v2_mul(entity->velocity, v2(-1, 1));
 }
 
-void apply_damage(Entity* obstacle, int damage) {
+bool apply_damage(Entity* obstacle, int damage) {
     obstacle->obstacle_health -= damage;
     if (obstacle->obstacle_health <= 0) {
 		// Destroy the obstacle after its health is 0
         entity_destroy(obstacle);
         number_of_destroyed_obstacles += 1;
+		return true;
     }
+	return false;
 }
 
 bool circle_rect_collision(Entity* circle, Entity* rect) {
@@ -130,10 +149,17 @@ bool circle_rect_collision(Entity* circle, Entity* rect) {
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
     int damage = 1; // This can be changes in the future
-    apply_damage(obstacle, damage);
+    bool obstacle_destroyed = apply_damage(obstacle, damage);
     
-    // Destroy the projectile after it hits the obstacle
-    entity_destroy(projectile);
+	if (obstacle_destroyed) 
+	{
+		entity_destroy(projectile);
+	} 
+	else // Bounce the projectile if the obstacle isent destroyed immediately
+	{
+		projectile_bounce(projectile);
+	}
+    
 }
 
 void reset_values() {
@@ -149,6 +175,8 @@ int entry(int argc, char **argv) {
 	window.x = 200;
 	window.y = 200;
 	window.clear_color = COLOR_BLACK; // Background color
+
+	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
 	float64 seconds_counter = 0.0;
 	s32 frame_count = 0;
@@ -185,6 +213,9 @@ int entry(int argc, char **argv) {
 		float64 delta_t = now - last_time;
 		last_time = now;
 
+		// Mouse Positions
+		mouse_position = screen_to_world();
+
 		// main code loop here --------------
 		if (is_key_just_pressed(KEY_TAB)) 
 		{
@@ -196,7 +227,7 @@ int entry(int argc, char **argv) {
 			reset_values();
 		}
 
-		if (player->is_valid || game_over)
+		if (player->is_valid && !game_over)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
@@ -253,28 +284,37 @@ int entry(int argc, char **argv) {
 						} 
 					}
 				}
+				// If projectile bounce on the sides
+				if (entity->position.x <= -window.width / 2 || entity->position.x >= window.width / 2)
+				{
+					projectile_bounce(entity);
+				}
+
+				// If projectile exit
+				if (entity->position.y >= window.height / 2)
+				{
+					number_of_shots_missed++;
+					entity_destroy(entity);
+				}
 			}
 			
-			// TODO fix this below
-			if (is_out_of_bounds(entity) && entity->is_projectile)
-			{
-				number_of_shots_missed++;
-				entity_destroy(entity);
-			}
+			
+			{ // Draw The Entity
+				if (entity->is_projectile) 
+				{
+					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+					draw_circle(draw_position, entity->size, entity->color);
+				}
 
-			if (entity->is_projectile) 
-			{
-				Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-				draw_circle(draw_position, entity->size, entity->color);
+				if (entity->is_player || entity->is_obstacle) 
+				{
+					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+					draw_rect(draw_position, entity->size, entity->color);
+					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
+					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
+				}
 			}
-
-			if (entity->is_player || entity->is_obstacle) 
-			{
-				Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-				draw_rect(draw_position, entity->size, entity->color);
-				Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
-				if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
-			}
+			
 		}
 
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
@@ -293,6 +333,11 @@ int entry(int argc, char **argv) {
 			Vector2 heart_position = v2(0, -window.height / 2);
 			heart_position = v2_add(heart_position, v2((heart_size + heart_padding)*i, 0));
 			draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
+		}
+
+		if (debug_mode) 
+		{
+			draw_line(player->position, mouse_position, 2.0f, COLOR_WHITE);
 		}
 		
 		// main code loop here --------------a
