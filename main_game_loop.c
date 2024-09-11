@@ -86,7 +86,7 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
-	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, player->position))
+	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, player->position));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
 
 	entity->is_projectile = true;
