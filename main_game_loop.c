@@ -1,5 +1,6 @@
 // game variables
 #define MAX_ENTITY_COUNT 1024
+
 // TODO: try to remove the need for global variables
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
@@ -9,6 +10,7 @@ float projectile_speed = 500;
 bool debug_mode = false;
 bool game_over = false;
 Vector2 mouse_position;
+s32 delta_t;
 
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
@@ -32,6 +34,14 @@ Vector2 screen_to_world() {
 	return (Vector2){world_pos.x, world_pos.y};
 }
 
+typedef enum ObstacleType {
+	NIL_obstacle,
+	BASE_obstacle,
+	HARD_obstacle,
+	BLOCK_obstacle,
+	MAX_obstacle,
+} ObstacleType;
+
 typedef struct Entity {
 	// --- Entity Attributes ---
 	Vector2 size;
@@ -45,8 +55,10 @@ typedef struct Entity {
 	// Obstacle
 	bool is_obstacle;
 	int obstacle_health;
+	enum ObstacleType obstacle_type;
 	// Projectile
 	bool is_projectile;
+	int n_bounces;
 	// Power UP
 	bool is_power_up;
 } Entity;
@@ -84,7 +96,7 @@ void setup_player(Entity* entity) {
 
 void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
-	entity->position = player->position;
+	entity->position = v2_add(player->position, v2(0, 30));
 	entity->color = v4(0, 1, 0, 1); // Green color
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, player->position));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
@@ -92,23 +104,37 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->is_projectile = true;
 }
 
-void setup_obstacle(Entity* entity, int x_index, int y_index) {
+void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	int size = 20;
 	int padding = 10;
 	entity->size = v2(size, size);
 	entity->position = v2(-180, -45);
 	entity->position = v2_add(entity->position, v2(x_index*(size + padding), y_index*(size + padding)));
-	entity->color = v4(1, 0, 0, 1);
 	
 	// TODO: Make it more clear which block is harder
-	if (get_random_float64_in_range(0, 1) <= 0.10) 
+	float random_value = get_random_float64_in_range(0, 1);
+
+	if (random_value <= 0.30) // 30% chance
 	{
+		// HARD obstacle
+		entity->obstacle_type = HARD_obstacle;
 		entity->obstacle_health = 2;
+	} 
+	else if (random_value <= 0.40)  // 10% chance
+	{
+		// BLOCK obstacle
+		entity->obstacle_type = BLOCK_obstacle;
+		entity->obstacle_health = 9999;
 		entity->size = v2(30, 30);
 	} 
-	else 
+	else
 	{
+		// BASE obstacle
+		entity->obstacle_type = BASE_obstacle;
 		entity->obstacle_health = 1;
+		float red = 1 - (float)(x_index+1) / n_rows;
+		float blue = (float)(x_index+1) / n_rows;
+		entity->color = v4(red, 0, blue, 1);
 	}
 
 	entity->is_obstacle = true;
@@ -126,29 +152,33 @@ void setup_power_up(Entity* entity) {
 // Problem arises with calculating damage when projectile survives
 // The loop will run multiple of times before the projectile can bounce away.
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
+	projectile->n_bounces++;
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
-	if (pos_diff.x > pos_diff.y) 
+	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
 	{
+		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -10 * delta_t));
 		projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 	} 
 	else 
 	{
+		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -10 * delta_t)); // go back 
 		projectile->velocity = v2_mul(projectile->velocity, v2( 1, -1)); // Bounce y-axis
 	}
 }
 
 void projectile_bounce_world(Entity* projectile) {
+	projectile->n_bounces++;
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 }
 
 void apply_damage(Entity* obstacle, float damage) {
-    obstacle->obstacle_health -= damage;
+	obstacle->obstacle_health -= damage;
 
-    if (obstacle->obstacle_health <= 0) {
+	if (obstacle->obstacle_health <= 0) {
 		// Destroy the obstacle after its health is 0
-        entity_destroy(obstacle);
-        number_of_destroyed_obstacles += 1;
-    }
+		entity_destroy(obstacle);
+		number_of_destroyed_obstacles += 1;
+	}
 }
 
 bool circle_rect_collision(Entity* circle, Entity* rect) {
@@ -168,10 +198,21 @@ bool circle_rect_collision(Entity* circle, Entity* rect) {
 }
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
-    int damage = 1.0f; // This can be changes in the future
-	apply_damage(obstacle, damage);
 
-	entity_destroy(projectile);
+    int damage = 1.0f; // This can be changes in the future
+
+	if (obstacle->obstacle_type == BASE_obstacle || obstacle->obstacle_type == HARD_obstacle) { 
+		apply_damage(obstacle, damage);
+	}
+	
+	if (obstacle->obstacle_type == BLOCK_obstacle) 
+	{
+		projectile_bounce(projectile, obstacle);
+	} 
+	else 
+	{
+		entity_destroy(projectile);
+	}
 }
 
 // TODO: Better system for this
@@ -210,11 +251,10 @@ int entry(int argc, char **argv) {
 	int columns_obstacles = 13;
 	for (int i = 0; i < rows_obstacles; i++) { // x
 		for (int j = 0; j < columns_obstacles; j++) { // y
-			Entity* entity = entity_create();
-			setup_obstacle(entity, i, j);
-			float red = 1 - (float)(i+1) / rows_obstacles;
-			float blue = (float)(i+1) / rows_obstacles;
-			entity->color = v4(red, 0, blue, 1);
+			if (get_random_float64_in_range(0, 1) <= 0.70) {
+				Entity* entity = entity_create();
+				setup_obstacle(entity, i, j, rows_obstacles);
+			}
 		}
 	}
 
@@ -289,7 +329,7 @@ int entry(int argc, char **argv) {
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
 					Entity* other_entity = &entities[j];
-					if (other_entity->is_obstacle) 
+					if (other_entity->is_obstacle || other_entity->is_player) 
 					{
 						if (circle_rect_collision(entity, other_entity)) 
 						{
@@ -322,6 +362,22 @@ int entry(int argc, char **argv) {
 
 				if (entity->is_player || entity->is_obstacle) 
 				{
+					if (entity->is_obstacle) 
+					{
+						switch(entity->obstacle_type) 
+						{
+							case(HARD_obstacle):
+								float r = 0.5 * sin(os_get_elapsed_seconds() + 3*PI32) + 0.5;
+								entity->color = v4(r, 0, 1, 1);
+								break;
+							case(BLOCK_obstacle):
+								float a = 0.5 * sin(os_get_elapsed_seconds()) + 0.5;
+								entity->color = v4(0.2, 0.2, 0.2, a);
+								break;
+							default: break;
+						}
+						
+					}
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_rect(draw_position, entity->size, entity->color);
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
