@@ -1,5 +1,6 @@
 // game variables
 #define MAX_ENTITY_COUNT 1024
+// TODO: try to remove the need for global variables
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
@@ -50,6 +51,8 @@ typedef struct Entity {
 	bool is_power_up;
 } Entity;
 
+// TODO: Probably Noel wants to add a struct for power ups to seperate from the entities.
+
 // A list to hold all the entities
 Entity entities[MAX_ENTITY_COUNT];
 
@@ -83,7 +86,8 @@ void setup_projectile(Entity* entity, Entity* player) {
 	entity->size = v2(10, 10);
 	entity->position = player->position;
 	entity->color = v4(0, 1, 0, 1); // Green color
-	entity->velocity = v2_mulf(v2_normalize(v2_sub(mouse_position, player->position)), projectile_speed);
+	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, player->position))
+	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
 
 	entity->is_projectile = true;
 }
@@ -96,6 +100,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->position = v2_add(entity->position, v2(x_index*(size + padding), y_index*(size + padding)));
 	entity->color = v4(1, 0, 0, 1);
 	
+	// TODO: Make it more clear which block is harder
 	if (get_random_float64_in_range(0, 1) <= 0.10) 
 	{
 		entity->obstacle_health = 2;
@@ -117,6 +122,9 @@ void setup_power_up(Entity* entity) {
 	number_of_power_ups++;
 }
 
+// TODO: implement projectile_bounce for obstacles with health > 1
+// Problem arises with calculating damage when projectile survives
+// The loop will run multiple of times before the projectile can bounce away.
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
 	if (pos_diff.x > pos_diff.y) 
@@ -166,6 +174,8 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	entity_destroy(projectile);
 }
 
+// TODO: Better system for this
+// Maybe have a world struct which holds all world variables?
 void reset_values() {
 	number_of_destroyed_obstacles = 0;
 	number_of_shots_fired = 0;
