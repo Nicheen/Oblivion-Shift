@@ -113,19 +113,19 @@ void apply_damage(Entity* obstacle, int damage) {
 }
 
 bool circle_rect_collision(Entity* circle, Entity* rect) {
-	Vector2 distance = v2_sub(projectile->position, obstacle->position);
+	Vector2 distance = v2_sub(circle->position, rect->position);
 	float dist_x = fabsf(distance.x);
 	float dist_y = fabsf(distance.y);
 
-	if (dist_x > (obstacle->size.x / 2.0f + projectile->size.x / 2.0f)) { return false; }
-	if (dist_y > (obstacle->size.y / 2.0f + projectile->size.y / 2.0f)) { return false; }
+	if (dist_x > (rect->size.x / 2.0f + circle->size.x / 2.0f)) { return false; }
+	if (dist_y > (rect->size.y / 2.0f + circle->size.y / 2.0f)) { return false; }
 
-	if (dist_x <= (obstacle->size.x / 2.0f)) { return true; }
-	if (dist_y <= (obstacle->size.y / 2.0f)) { return true; }
+	if (dist_x <= (rect->size.x / 2.0f)) { return true; }
+	if (dist_y <= (rect->size.y / 2.0f)) { return true; }
 
-	float dx = dist_x - obstacle->size.x / 2.0f;
-	float dy = dist_y - obstacle->size.y / 2.0f;
-	return (dx*dx+dy*dy <= projectile->size.x*projectile->size.y);
+	float dx = dist_x - rect->size.x / 2.0f;
+	float dy = dist_y - rect->size.y / 2.0f;
+	return (dx*dx+dy*dy <= circle->size.x*circle->size.y);
 }
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
