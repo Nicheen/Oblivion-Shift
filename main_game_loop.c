@@ -127,26 +127,23 @@ void setup_power_up(Entity* entity) {
 
 	if (random_value < 0.25)
 	{
-		entity->obstacle_type = test_power_up_blue;
-		entity->color = v4(0,0,1,1);
+		entity->power_up_type = test_power_up_blue;
+		entity->color = COLOR_BLUE;
 	} 
-
 	else if (random_value < 0.50)
 	{
-		entity->obstacle_type = test_power_up_green;
-		entity->color = v4(0,1,0,1);
+		entity->power_up_type = test_power_up_green;
+		entity->color = COLOR_GREEN;
 	} 
-
 	else if (random_value < 0.75)
 	{
-		entity->obstacle_type = test_power_up_yellow;
-		entity->color = v4(1,1,0,1);
+		entity->power_up_type = test_power_up_yellow;
+		entity->color = COLOR_YELLOW;
 	} 
-
 	else
 	{
-		entity->obstacle_type = test_power_up_red;
-		entity->color = v4(1,0,0,1);
+		entity->power_up_type = test_power_up_red;
+		entity->color = COLOR_RED;
 	}
 }
 
@@ -393,17 +390,19 @@ int entry(int argc, char **argv) {
 					{
 						if (circle_circle_collision(entity, other_entity)) 
 						{
-							if(other_entity->obstacle_type == test_power_up_green){
+							if(other_entity->power_up_type == test_power_up_green){
 								death_zone_bottom = v4(0, 1, 0, 0.5);
 							}
-							if(other_entity->obstacle_type == test_power_up_yellow){
+							if(other_entity->power_up_type == test_power_up_yellow){
 								death_zone_top = v4(0, 1, 0, 0.5);
 							}
-							if(other_entity->obstacle_type == test_power_up_blue){
-								player->size.x += 50;
+							if(other_entity->power_up_type == test_power_up_blue){
+								player->size = v2_add(player->size, v2(100, 0));
 							}
-							if(other_entity->obstacle_type == test_power_up_red){
-								projectile_speed -= 50;
+							if(other_entity->power_up_type == test_power_up_red){
+								if (number_of_shots_missed > 0) {
+									number_of_shots_missed--;
+								}
 							}
 							handle_projectile_collision(entity, other_entity);
 							number_of_power_ups--;
@@ -440,25 +439,24 @@ int entry(int argc, char **argv) {
 					if(entity->is_power_up){
 						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);
 				
-					switch(entity->power_up_type)
-					{
-						case(test_power_up_green):
-							break;
-						case(test_power_up_yellow):
-							break;
-						case(test_power_up_blue):
-							break;
-						case(test_power_up_red):
-							break;
-						default: break;
-					}
-				
+						switch(entity->power_up_type)
+						{
+							case(test_power_up_green):
+								break;
+							case(test_power_up_yellow):
+								break;
+							case(test_power_up_blue):
+								break;
+							case(test_power_up_red):
+								float r = 0.2 * sin(10*t) + 0.8;
+								entity->color = v4(r, 0, 0, 1);
+								break;
+							default: break;
 						}
-					
+					}
 					
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_circle(draw_position, entity->size, entity->color);
-
 				}
 
 				if (entity->is_player || entity->is_obstacle) 
