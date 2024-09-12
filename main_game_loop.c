@@ -42,6 +42,15 @@ typedef enum ObstacleType {
 	BLOCK_obstacle = 3,
 	MAX_obstacle,
 } ObstacleType;
+	
+typedef enum Power_Up_Type {
+	NIL_power_up = 0,
+	test_power_up_green = 1,
+	test_power_up_red = 2,
+	test_power_up_blue = 3,
+	test_power_up_yellow = 4,
+	Max_power_up,
+} Power_Up_Type;
 
 typedef struct Entity {
 	// --- Entity Attributes ---
@@ -62,6 +71,7 @@ typedef struct Entity {
 	int n_bounces;
 	// Power UP
 	bool is_power_up;
+	enum Power_Up_Type power_up_type;
 } Entity;
 
 // TODO: Probably Noel wants to add a struct for power ups to seperate from the entities.
@@ -109,10 +119,35 @@ void setup_projectile(Entity* entity, Entity* player) {
 void setup_power_up(Entity* entity) {
 	int size = 25;
 	entity->size = v2(size, size);
-	entity->color = v4(0, 0, 1, 1);
 	entity->obstacle_health = 1;
 	entity->is_power_up = true;
 	number_of_power_ups++;
+
+	float random_value = get_random_float64_in_range(0, 1);
+
+	if (random_value < 0.25)
+	{
+		entity->obstacle_type = test_power_up_blue;
+		entity->color = v4(0,0,1,1);
+	} 
+
+	else if (random_value < 0.50)
+	{
+		entity->obstacle_type = test_power_up_green;
+		entity->color = v4(0,1,0,1);
+	} 
+
+	else if (random_value < 0.75)
+	{
+		entity->obstacle_type = test_power_up_yellow;
+		entity->color = v4(1,1,0,1);
+	} 
+
+	else
+	{
+		entity->obstacle_type = test_power_up_red;
+		entity->color = v4(1,0,0,1);
+	}
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
@@ -245,7 +280,8 @@ int entry(int argc, char **argv) {
 	window.x = 200;
 	window.y = 200;
 	window.clear_color = COLOR_BLACK; // Background color
-
+	Vector4 death_zone_bottom = v4(1, 0, 0, 0.5);
+	Vector4 death_zone_top = v4(1, 0, 0, 0.5);
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
 	float64 seconds_counter = 0.0;
@@ -310,7 +346,7 @@ int entry(int argc, char **argv) {
 				number_of_shots_fired++;
 			}
 
-			if (number_of_destroyed_obstacles % 20 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
+			if (number_of_destroyed_obstacles % 5 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
 				Entity* power_up = entity_create();
 				setup_power_up(power_up);
 			}
@@ -357,6 +393,18 @@ int entry(int argc, char **argv) {
 					{
 						if (circle_circle_collision(entity, other_entity)) 
 						{
+							if(other_entity->obstacle_type == test_power_up_green){
+								death_zone_bottom = v4(0, 1, 0, 0.5);
+							}
+							if(other_entity->obstacle_type == test_power_up_yellow){
+								death_zone_top = v4(0, 1, 0, 0.5);
+							}
+							if(other_entity->obstacle_type == test_power_up_blue){
+								player->size.x += 50;
+							}
+							if(other_entity->obstacle_type == test_power_up_red){
+								projectile_speed -= 50;
+							}
 							handle_projectile_collision(entity, other_entity);
 							number_of_power_ups--;
                     		break; // Exit after handling the first collision
@@ -373,8 +421,14 @@ int entry(int argc, char **argv) {
 				// If projectile exit up or down
 				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2 )
 				{
-					number_of_shots_missed++;
-					entity_destroy(entity);
+					if (death_zone_bottom.y == 1 || death_zone_top.y == 1){
+						entity_destroy(entity);
+					}
+					else 
+					{
+						number_of_shots_missed++;
+						entity_destroy(entity);
+					}
 				}
 			}
 			
@@ -383,11 +437,25 @@ int entry(int argc, char **argv) {
 				float64 t = os_get_elapsed_seconds();
 				if (entity->is_projectile || entity->is_power_up) 
 				{
-					
 					if(entity->is_power_up){
-						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);	
-						//log("%i %i", entity->position.x, entity->position.y);
+						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);
+				
+					switch(entity->power_up_type)
+					{
+						case(test_power_up_green):
+							break;
+						case(test_power_up_yellow):
+							break;
+						case(test_power_up_blue):
+							break;
+						case(test_power_up_red):
+							break;
+						default: break;
 					}
+				
+						}
+					
+					
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_circle(draw_position, entity->size, entity->color);
 
@@ -415,6 +483,7 @@ int entry(int argc, char **argv) {
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
 					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
 				}
+				
 			}
 		}
 
@@ -442,8 +511,8 @@ int entry(int argc, char **argv) {
 		}
 
 		float wave = 15*(sin(now) + 1);
-		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
-		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, v4(1, 0, 0, 0.5));
+		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, death_zone_top);
+		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, death_zone_bottom);
 		
 		// main code loop here --------------a
 		os_update(); 
