@@ -489,16 +489,29 @@ int entry(int argc, char **argv) {
 						}
 					}
 				}
-				// If projectile bounce on the sides
+				// If projectile bounce on the sidesb
 				if (entity->position.x <=  -window.width / 2 || entity->position.x >=  window.width / 2)
 				{
 					projectile_bounce_world(entity);
 				}
 
-				// If projectile exit up or down
-				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2 )
+				// If projectile exit down 
+				if (entity->position.y <= -window.height / 2)
 				{
-					if (death_zone_bottom.y == 1 || death_zone_top.y == 1){
+					if (death_zone_bottom.y == 1){
+						entity_destroy(entity);
+					}
+					else 
+					{
+						number_of_shots_missed++;
+						entity_destroy(entity);
+
+					}
+				}
+				// If projectile exit up 
+				if (entity->position.y >= window.height / 2)
+				{
+					if (death_zone_top.y == 1){
 						entity_destroy(entity);
 					}
 					else 
@@ -510,24 +523,27 @@ int entry(int argc, char **argv) {
 				}
 			}
 			
-			
 			{ // Draw The Entity
 				float64 t = os_get_elapsed_seconds();
 				if (entity->is_projectile || entity->is_power_up) 
 				{
 					if(entity->is_power_up){
 						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);
-				
+						float g = 0.2 * sin(10*t) + 0.8;
+						float r = 0.2 * sin(10*t) + 0.8;
+						float b = 0.2 * sin(10*t) + 0.8;
 						switch(entity->power_up_type)
 						{
 							case(test_power_up_green):
+								entity->color = v4(0, g, 0, 1);
 								break;
 							case(test_power_up_yellow):
+								entity->color = v4(r, g, 0, 1);
 								break;
 							case(test_power_up_blue):
+								entity->color = v4(0, 0, b, 1);
 								break;
 							case(test_power_up_red):
-								float r = 0.2 * sin(10*t) + 0.8;
 								entity->color = v4(r, 0, 0, 1);
 								break;
 							default: break;
