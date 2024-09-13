@@ -475,7 +475,7 @@ int entry(int argc, char **argv) {
 						}
 					}
 				}
-				// If projectile bounce on the sides
+				// If projectile bounce on the sidesb
 				if (entity->position.x <=  -window.width / 2 || entity->position.x >=  window.width / 2)
 				{
 					projectile_bounce_world(entity);
