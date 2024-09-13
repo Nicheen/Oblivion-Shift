@@ -8,8 +8,12 @@ int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
 float projectile_speed = 500;
 int number_of_hearts = 3;
+float timer_power_up = 0;
+Vector4 death_zone_bottom;
+Vector4 death_zone_top;
 bool debug_mode = false;
 bool game_over = false;
+bool is_power_up_active = false;
 Vector2 mouse_position;
 s32 delta_t;
 
@@ -305,6 +309,27 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	}
 }
 
+void apply_power_up(Entity* power_up, Entity* player) {
+	if(power_up->power_up_type == test_power_up_green){
+		death_zone_bottom = v4(0, 1, 0, 0.5);
+		is_power_up_active = true;
+		timer_power_up = 10.0f; //funkar ej ännu
+	}
+	if(power_up->power_up_type == test_power_up_yellow){
+		death_zone_top = v4(0, 1, 0, 0.5);
+	}
+	if(power_up->power_up_type == test_power_up_blue){
+		player->size = v2_add(player->size, v2(100, 0));
+	}
+	if(power_up->power_up_type == test_power_up_red){
+		if (number_of_shots_missed > 0) {
+			number_of_shots_missed--;
+		}
+	}
+
+}
+
+
 // TODO: Better system for this
 // Maybe have a world struct which holds all world variables?
 void reset_values() {
@@ -320,8 +345,8 @@ int entry(int argc, char **argv) {
 	window.x = 200;
 	window.y = 200;
 	window.clear_color = COLOR_BLACK; // Background color
-	Vector4 death_zone_bottom = v4(1, 0, 0, 0.5);
-	Vector4 death_zone_top = v4(1, 0, 0, 0.5);
+	death_zone_bottom = v4(1, 0, 0, 0.5);
+	death_zone_top = v4(1, 0, 0, 0.5);
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
 	float64 seconds_counter = 0.0;
@@ -443,20 +468,7 @@ int entry(int argc, char **argv) {
 					{
 						if (circle_circle_collision(entity, other_entity)) 
 						{
-							if(other_entity->power_up_type == test_power_up_green){
-								death_zone_bottom = v4(0, 1, 0, 0.5);
-							}
-							if(other_entity->power_up_type == test_power_up_yellow){
-								death_zone_top = v4(0, 1, 0, 0.5);
-							}
-							if(other_entity->power_up_type == test_power_up_blue){
-								player->size = v2_add(player->size, v2(100, 0));
-							}
-							if(other_entity->power_up_type == test_power_up_red){
-								if (number_of_shots_missed > 0) {
-									number_of_shots_missed--;
-								}
-							}
+							apply_power_up(other_entity, player);
 							handle_projectile_collision(entity, other_entity);
 							number_of_power_ups--;
                     		break; // Exit after handling the first collision
@@ -479,6 +491,7 @@ int entry(int argc, char **argv) {
 					{
 						number_of_shots_missed++;
 						entity_destroy(entity);
+
 					}
 				}
 			}
