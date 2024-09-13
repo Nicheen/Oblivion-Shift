@@ -278,9 +278,11 @@ void apply_damage(Entity* obstacle, float damage) {
 
 	if (obstacle->obstacle_health <= 0) {
 		// Destroy the obstacle after its health is 0
-		if (obstacle->is_obstacle) { propagate_wave(obstacle); }
+		if (obstacle->is_obstacle) {
+			number_of_destroyed_obstacles ++;
+			propagate_wave(obstacle); 
+		}
 		entity_destroy(obstacle);
-		number_of_destroyed_obstacles += 1;
 	}
 }
 
@@ -618,7 +620,7 @@ int entry(int argc, char **argv) {
 							float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
 							float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
 							
-							//Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+							// Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
 							float extra_size = 5.0f;
 
 							float size_value = extra_size * easeOutBounce(normalized_wave_time);
@@ -653,7 +655,7 @@ int entry(int argc, char **argv) {
 
 		
 		if (debug_mode) {
-			draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2), v2(0.7, 0.7), COLOR_RED);
+			draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, -window.height / 2 + 50), v2(0.7, 0.7), COLOR_RED);
 			draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2 + 25), v2(0.7, 0.7), COLOR_GREEN);
 		}
 		
