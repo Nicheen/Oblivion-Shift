@@ -1,6 +1,9 @@
 {
   "C_Cpp.errorSquiggles": "disabled",
   "files.associations": {
-    "*.rh": "c"
+    "*.rh": "c",
+    "initializer_list": "c",
+    "utility": "c",
+    "xutility": "c"
   }
 }
