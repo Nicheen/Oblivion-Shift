@@ -17,8 +17,22 @@ bool is_power_up_active = false;
 Vector2 mouse_position;
 s32 delta_t;
 
-float easeInQuart(float x) { // x inbetween 0-1
-	return x * x * x * x;
+inline float easeOutBounce(float x) {
+	const float n1 = 7.5625;
+	const float d1 = 2.75;
+
+	if (x < 1 / d1) {
+		return n1 * x * x;
+	} else if (x < 2 / d1) {
+		x -= 1.5 / d1;
+		return n1 * x * x + 0.75;
+	} else if (x < 2.5 / d1) {
+		x -= 2.25 / d1;
+    	return n1 * x * x + 0.9375;
+	} else {
+		x -= 2.625 / d1;
+		return n1 * x * x + 0.984375;
+	}
 }
 
 inline float v2_dist(Vector2 a, Vector2 b) {
@@ -67,7 +81,6 @@ typedef struct Entity {
 	Vector2 position;
 	Vector2 velocity;
 	Vector4 color;
-	Vector4 original_color;
 	bool is_valid;
 	// --- Entity Type Below ---
 	// Player
@@ -76,6 +89,7 @@ typedef struct Entity {
 	bool is_obstacle;
 	int obstacle_health;
 	float wave_time;
+	float wave_time_beginning;
 	enum ObstacleType obstacle_type;
 	// Projectile
 	bool is_projectile;
@@ -201,7 +215,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 		entity->obstacle_health = 1;
 		float red = 1 - (float)(x_index+1) / n_rows;
 		float blue = (float)(x_index+1) / n_rows;
-		entity->original_color = v4(red, 0, blue, 1);
+		entity->color = v4(red, 0, blue, 1);
 	}
 	
 	obstacle_list[obstacle_count].obstacle = entity;
@@ -236,9 +250,8 @@ void projectile_bounce_world(Entity* projectile) {
 }
 
 void propagate_wave(Entity* hit_obstacle) {
-    float wave_radius = 500.0f;  // Start with 0 radius and grow over time
+    float wave_radius = 100.0f;  // Start with 0 radius and grow over time
 	float wave_speed = 100.0f;
-	float wave_duration = 0.1f;
 
     Vector2 hit_position = hit_obstacle->position;
 
@@ -252,8 +265,9 @@ void propagate_wave(Entity* hit_obstacle) {
             // If within the wave radius, apply wave effect
             if (distance <= wave_radius) {
 				float wave_delay = distance / wave_speed;
-
-                current_obstacle->wave_time = max(0.0f, wave_duration - wave_delay);  // Delay based on distance
+				float wave_time = max(0.0f, wave_delay);
+                current_obstacle->wave_time = wave_time;
+				current_obstacle->wave_time_beginning = wave_time;
             }
         }
     }
@@ -587,11 +601,11 @@ int entry(int argc, char **argv) {
 						{
 							case(HARD_obstacle):
 								float r = 0.5 * sin(t + 3*PI32) + 0.5;
-								entity->original_color = v4(r, 0, 1, 1);
+								entity->color = v4(r, 0, 1, 1);
 								break;
 							case(BLOCK_obstacle):
 								float a = 0.3 * sin(2*t) + 0.7;
-								entity->original_color = v4(0.2, 0.2, 0.2, a);
+								entity->color = v4(0.2, 0.2, 0.2, a);
 								break;
 							default: break;
 						}
@@ -601,19 +615,28 @@ int entry(int argc, char **argv) {
 							if (entity->wave_time < 0.0f) {
 								entity->wave_time = 0.0f;
 							}
-
-							// Animate obstacle as part of the wave (change color/size, etc.)
+							float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
 							float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
 							
-							entity->color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+							//Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+							float extra_size = 5.0f;
+
+							float size_value = extra_size * easeOutBounce(normalized_wave_time);
+							if (size_value >= extra_size * 0.5) {
+								size_value = extra_size * easeOutBounce(entity->wave_time_beginning - normalized_wave_time);
+							}
+							Vector2 diff_size = v2_add(entity->size, v2(size_value, size_value));
+							
+							Vector2 draw_position = v2_sub(entity->position, v2_mulf(diff_size, 0.5));
+							draw_rect(draw_position, diff_size, entity->color);
 						}
 						else
 						{
-							entity->color = entity->original_color;
+							Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+							draw_rect(draw_position, entity->size, entity->color);
 						}
 					}
-					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-					draw_rect(draw_position, entity->size, entity->color);
+					
 					
 					
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
