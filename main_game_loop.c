@@ -71,6 +71,7 @@ typedef enum Power_Up_Type {
 	test_power_up_red = 2,
 	test_power_up_blue = 3,
 	test_power_up_yellow = 4,
+	test_power_up_cyan = 5,
 	Max_power_up,
 } Power_Up_Type;
 
@@ -156,26 +157,31 @@ void setup_power_up(Entity* entity) {
 	number_of_power_ups++;
 
 	float random_value = get_random_float64_in_range(0, 1);
-
-	if (random_value < 0.25)
+	float n_powerups = 5;
+	if (random_value < 1/n_powerups)
 	{
 		entity->power_up_type = test_power_up_blue;
 		entity->color = COLOR_BLUE;
 	} 
-	else if (random_value < 0.50)
+	else if (random_value < 2/n_powerups)
 	{
 		entity->power_up_type = test_power_up_green;
 		entity->color = COLOR_GREEN;
 	} 
-	else if (random_value < 0.75)
+	else if (random_value < 3/n_powerups)
 	{
 		entity->power_up_type = test_power_up_yellow;
 		entity->color = COLOR_YELLOW;
 	} 
-	else
+	else if (random_value < 4/n_powerups)
 	{
 		entity->power_up_type = test_power_up_red;
 		entity->color = COLOR_RED;
+	}
+	else
+	{
+		entity->power_up_type = test_power_up_cyan;
+		entity->color = v4(0, 1, 1, 1);
 	}
 }
 
@@ -327,22 +333,49 @@ void apply_power_up(Entity* power_up, Entity* player) {
 	if(power_up->power_up_type == test_power_up_green){
 		death_zone_bottom = v4(0, 1, 0, 0.5);
 		is_power_up_active = true;
-		timer_power_up = 10.0f; //funkar ej ännu
+		timer_power_up = 5.0f;
 	}
 	if(power_up->power_up_type == test_power_up_yellow){
 		death_zone_top = v4(0, 1, 0, 0.5);
+		is_power_up_active = true;
+		timer_power_up = 5.0f;
 	}
 	if(power_up->power_up_type == test_power_up_blue){
 		player->size = v2_add(player->size, v2(100, 0));
+		is_power_up_active = true;
+		timer_power_up = 5.0f;
 	}
 	if(power_up->power_up_type == test_power_up_red){
 		if (number_of_shots_missed > 0) {
 			number_of_shots_missed--;
 		}
 	}
+	if(power_up->power_up_type == test_power_up_cyan){
+		projectile_speed += 500;
+	}
 
 }
 
+void update_power_up_timer(Entity* player, float delta_t) {
+    // Kontrollera om power-upen är aktiv
+    if (is_power_up_active) {
+        timer_power_up -= delta_t;  // Minska timern varje bildruta
+
+        if (timer_power_up <= 0 && test_power_up_green) {
+            // Återställ effekten när timern når 0
+            death_zone_bottom = v4(1, 0, 0, 0.5);  // Återställ till standardfärg
+            is_power_up_active = false;  // Deaktivera power-upen
+        }
+		if (timer_power_up <= 0 && test_power_up_yellow) {
+            death_zone_top = v4(1, 0, 0, 0.5); 
+            is_power_up_active = false;  
+        }
+		if (timer_power_up <= 0 && test_power_up_blue) {
+            player->size = v2_add(player->size, v2(50, 0));
+            is_power_up_active = false; 
+		}
+    }
+}
 
 // TODO: Better system for this
 // Maybe have a world struct which holds all world variables?
@@ -397,6 +430,9 @@ int entry(int argc, char **argv) {
 		float64 now = os_get_elapsed_seconds();
 		float64 delta_t = now - last_time;
 		last_time = now;
+
+		// Uppdatera timern för power-up
+        update_power_up_timer(player, delta_t);
 
 		// Mouse Positions
 		mouse_position = screen_to_world();
@@ -545,6 +581,9 @@ int entry(int argc, char **argv) {
 								break;
 							case(test_power_up_red):
 								entity->color = v4(r, 0, 0, 1);
+								break;
+							case(test_power_up_cyan):
+								entity->color = v4(0, g, b, 1);
 								break;
 							default: break;
 						}
