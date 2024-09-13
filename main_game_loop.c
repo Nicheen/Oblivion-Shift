@@ -597,6 +597,11 @@ int entry(int argc, char **argv) {
 							draw_rect(draw_position, entity->size, entity->color);
 						}
 					}
+					else
+					{
+						Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+						draw_rect(draw_position, entity->size, entity->color);
+					}
 					
 					
 					
@@ -608,10 +613,11 @@ int entry(int argc, char **argv) {
 		}
 
 		
-
-		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
-		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
-
+		if (debug_mode) {
+			draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2), v2(0.7, 0.7), COLOR_RED);
+			draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2 + 25), v2(0.7, 0.7), COLOR_GREEN);
+		}
+		
 		// Check if game is over or not
 		game_over = number_of_shots_missed >= number_of_hearts;
 
