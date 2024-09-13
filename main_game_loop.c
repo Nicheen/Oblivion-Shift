@@ -361,7 +361,7 @@ void apply_power_up(Entity* power_up, Entity* player) {
 void update_power_up_timer(Entity* player, float delta_t) {
     // Kontrollera om power-upen är aktiv
     if (is_power_up_active) {
-        timer_power_up -= delta_t;  // Minska timern varje bildruta
+        timer_power_up -= delta_t;
 
         if (timer_power_up <= 0 && test_power_up_green) {
             // Återställ effekten när timern når 0
@@ -373,7 +373,7 @@ void update_power_up_timer(Entity* player, float delta_t) {
             is_power_up_active = false;  
         }
 		if (timer_power_up <= 0 && test_power_up_blue) {
-            player->size = v2_add(player->size, v2(50, 0));
+            player->size = v2_sub(player->size, v2(100, 0));
             is_power_up_active = false; 
 		}
     }
