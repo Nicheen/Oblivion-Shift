@@ -13,6 +13,10 @@ bool game_over = false;
 Vector2 mouse_position;
 s32 delta_t;
 
+float easeInQuart(float x) { // x inbetween 0-1
+	return x * x * x * x;
+}
+
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
 }
@@ -58,6 +62,7 @@ typedef struct Entity {
 	Vector2 position;
 	Vector2 velocity;
 	Vector4 color;
+	Vector4 original_color;
 	bool is_valid;
 	// --- Entity Type Below ---
 	// Player
@@ -65,6 +70,7 @@ typedef struct Entity {
 	// Obstacle
 	bool is_obstacle;
 	int obstacle_health;
+	float wave_time;
 	enum ObstacleType obstacle_type;
 	// Projectile
 	bool is_projectile;
@@ -96,6 +102,14 @@ Entity* entity_create() {
 void entity_destroy(Entity* entity) {
 	memset(entity, 0, sizeof(Entity));
 }
+
+typedef struct ObstacleTuple {
+	Entity* obstacle;
+	int x;
+	int y;
+} ObstacleTuple;
+ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+int obstacle_count = 0;
 
 void setup_player(Entity* entity) {
 	entity->size = v2(50, 20);
@@ -177,9 +191,13 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 		entity->obstacle_health = 1;
 		float red = 1 - (float)(x_index+1) / n_rows;
 		float blue = (float)(x_index+1) / n_rows;
-		entity->color = v4(red, 0, blue, 1);
+		entity->original_color = v4(red, 0, blue, 1);
 	}
-
+	
+	obstacle_list[obstacle_count].obstacle = entity;
+	obstacle_list[obstacle_count].x = x_index;
+	obstacle_list[obstacle_count].y = y_index;
+	obstacle_count++;
 	entity->is_obstacle = true;
 }
 
@@ -207,11 +225,36 @@ void projectile_bounce_world(Entity* projectile) {
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 }
 
+void propagate_wave(Entity* hit_obstacle) {
+    float wave_radius = 500.0f;  // Start with 0 radius and grow over time
+	float wave_speed = 100.0f;
+	float wave_duration = 0.1f;
+
+    Vector2 hit_position = hit_obstacle->position;
+
+    // Iterate over all obstacles to propagate the wave
+    for (int i = 0; i < obstacle_count; i++) {
+        Entity* current_obstacle = obstacle_list[i].obstacle;
+		
+        if (current_obstacle != hit_obstacle) {  // Skip the hit obstacle itself
+            float distance = v2_dist(hit_position, current_obstacle->position);
+
+            // If within the wave radius, apply wave effect
+            if (distance <= wave_radius) {
+				float wave_delay = distance / wave_speed;
+
+                current_obstacle->wave_time = max(0.0f, wave_duration - wave_delay);  // Delay based on distance
+            }
+        }
+    }
+}
+
 void apply_damage(Entity* obstacle, float damage) {
 	obstacle->obstacle_health -= damage;
 
 	if (obstacle->obstacle_health <= 0) {
 		// Destroy the obstacle after its health is 0
+		if (obstacle->is_obstacle) { propagate_wave(obstacle); }
 		entity_destroy(obstacle);
 		number_of_destroyed_obstacles += 1;
 	}
@@ -378,12 +421,22 @@ int entry(int argc, char **argv) {
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
 					Entity* other_entity = &entities[j];
-					if (other_entity->is_obstacle || other_entity->is_player) 
+
+					if (other_entity->is_obstacle)
 					{
 						if (circle_rect_collision(entity, other_entity)) 
 						{
+							//other_entity->wave_time = 0.0f;
 							handle_projectile_collision(entity, other_entity);
-                    		break; // Exit after handling the first collision
+							break; // Exit after handling the first collision
+						}
+					}
+					if (other_entity->is_player) 
+					{
+						if (circle_rect_collision(entity, other_entity))
+						{
+							handle_projectile_collision(entity, other_entity);
+							break; // Exit after handling the first collision
 						} 
 					}
 					if (other_entity->is_power_up)
@@ -408,8 +461,7 @@ int entry(int argc, char **argv) {
 							number_of_power_ups--;
                     		break; // Exit after handling the first collision
 						}
-					} 
-					
+					}
 				}
 				// If projectile bounce on the sides
 				if (entity->position.x <=  -window.width / 2 || entity->position.x >=  window.width / 2)
@@ -467,23 +519,43 @@ int entry(int argc, char **argv) {
 						{
 							case(HARD_obstacle):
 								float r = 0.5 * sin(t + 3*PI32) + 0.5;
-								entity->color = v4(r, 0, 1, 1);
+								entity->original_color = v4(r, 0, 1, 1);
 								break;
 							case(BLOCK_obstacle):
 								float a = 0.3 * sin(2*t) + 0.7;
-								entity->color = v4(0.2, 0.2, 0.2, a);
+								entity->original_color = v4(0.2, 0.2, 0.2, a);
 								break;
 							default: break;
-						}				
+						}
+						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_obstacle) {
+							entity->wave_time -= delta_t;
+
+							if (entity->wave_time < 0.0f) {
+								entity->wave_time = 0.0f;
+							}
+
+							// Animate obstacle as part of the wave (change color/size, etc.)
+							float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
+							
+							entity->color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+						}
+						else
+						{
+							entity->color = entity->original_color;
+						}
 					}
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 					draw_rect(draw_position, entity->size, entity->color);
+					
+					
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
 					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), COLOR_GREEN); }
 				}
 				
 			}
 		}
+
+		
 
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, 25 - window.height / 2), v2(0.7, 0.7), COLOR_RED);
 		draw_text(font, sprint(get_temporary_allocator(), STR("%i"), number_of_shots_fired), font_height, v2(-window.width / 2, -window.height / 2), v2(0.7, 0.7), COLOR_GREEN);
