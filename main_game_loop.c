@@ -1,5 +1,15 @@
-// game variables
+// -----------------------------------------------------------------------
+// IMPORTS LOCAL FILES ONLY
+// -----------------------------------------------------------------------
+#include "include/easings.c"
+#include "include/types.c"
+
+// -----------------------------------------------------------------------
+// GLOBAL VARIABLES (!!!! WE USE #define and capital letters only !!!!)
+// -----------------------------------------------------------------------
 #define MAX_ENTITY_COUNT 1024
+#define GRID_WIDTH 13
+#define GRID_HEIGHT 13
 
 // TODO: try to remove the need for global variables
 int number_of_destroyed_obstacles = 0;
@@ -17,29 +27,11 @@ bool is_power_up_active = false;
 Vector2 mouse_position;
 s32 delta_t;
 
-inline float easeOutBounce(float x) {
-	const float n1 = 7.5625;
-	const float d1 = 2.75;
-
-	if (x < 1 / d1) {
-		return n1 * x * x;
-	} else if (x < 2 / d1) {
-		x -= 1.5 / d1;
-		return n1 * x * x + 0.75;
-	} else if (x < 2.5 / d1) {
-		x -= 2.25 / d1;
-    	return n1 * x * x + 0.9375;
-	} else {
-		x -= 2.625 / d1;
-		return n1 * x * x + 0.984375;
-	}
-}
-
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
 }
 
-Vector2 screen_to_world() {
+Vector2 MOUSE_POSITION() {
 	float mouseX = input_frame.mouse_x;
 	float mouseY = input_frame.mouse_y;
 	Matrix4 proj = draw_frame.projection;
@@ -57,51 +49,26 @@ Vector2 screen_to_world() {
 	return (Vector2){world_pos.x, world_pos.y};
 }
 
-typedef enum ObstacleType {
-	NIL_obstacle = 0,
-	BASE_obstacle = 1,
-	HARD_obstacle = 2,
-	BLOCK_obstacle = 3,
-	MAX_obstacle,
-} ObstacleType;
-	
-typedef enum Power_Up_Type {
-	NIL_power_up = 0,
-	test_power_up_green = 1,
-	test_power_up_red = 2,
-	test_power_up_blue = 3,
-	test_power_up_yellow = 4,
-	test_power_up_cyan = 5,
-	Max_power_up,
-} Power_Up_Type;
-
 typedef struct Entity {
 	// --- Entity Attributes ---
+	enum EntityType entitytype;
 	Vector2 size;
 	Vector2 position;
 	Vector2 velocity;
 	Vector4 color;
+	int health;
 	bool is_valid;
 	// --- Entity Type Below ---
-	// Player
-	bool is_player;
 	// Obstacle
-	bool is_obstacle;
-	int obstacle_health;
+	enum ObstacleType obstacle_type;
 	float wave_time;
 	float wave_time_beginning;
-	enum ObstacleType obstacle_type;
 	// Projectile
-	bool is_projectile;
 	int n_bounces;
 	// Power UP
-	bool is_power_up;
-	enum Power_Up_Type power_up_type;
+	enum PowerUpType power_up_type;
 } Entity;
 
-// TODO: Probably Noel wants to add a struct for power ups to seperate from the entities.
-
-// A list to hold all the entities
 Entity entities[MAX_ENTITY_COUNT];
 
 Entity* entity_create() {
@@ -131,61 +98,64 @@ ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
 int obstacle_count = 0;
 
 void setup_player(Entity* entity) {
+	entity->entitytype = PLAYER_ENTITY;
+
 	entity->size = v2(50, 20);
 	entity->position = v2(0, -300);
 	entity->color = COLOR_WHITE;
-
-	entity->is_player = true;
 }
 
 void setup_projectile(Entity* entity, Entity* player) {
+	entity->entitytype = PROJECTILE_ENTITY;
+
 	int setup_y_offset = 30;
 	entity->size = v2(10, 10);
 	entity->position = v2_add(player->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->position.x, player->position.y + setup_y_offset)));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
-
-	entity->is_projectile = true;
 }
 
 void setup_power_up(Entity* entity) {
+	entity->entitytype = POWERUP_ENTITY;
+
 	int size = 25;
 	entity->size = v2(size, size);
-	entity->obstacle_health = 1;
-	entity->is_power_up = true;
+	entity->health = 1;
 	number_of_power_ups++;
 
 	float random_value = get_random_float64_in_range(0, 1);
 	float n_powerups = 5;
 	if (random_value < 1/n_powerups)
 	{
-		entity->power_up_type = test_power_up_blue;
+		entity->power_up_type = EXPAND_POWER_UP;
 		entity->color = COLOR_BLUE;
 	} 
 	else if (random_value < 2/n_powerups)
 	{
-		entity->power_up_type = test_power_up_green;
+		entity->power_up_type = IMMORTAL_BOTTOM_POWER_UP;
 		entity->color = COLOR_GREEN;
 	} 
 	else if (random_value < 3/n_powerups)
 	{
-		entity->power_up_type = test_power_up_yellow;
+		entity->power_up_type = IMMORTAL_TOP_POWER_UP;
 		entity->color = COLOR_YELLOW;
 	} 
 	else if (random_value < 4/n_powerups)
 	{
-		entity->power_up_type = test_power_up_red;
+		entity->power_up_type = HEALTH_POWER_UP;
 		entity->color = COLOR_RED;
 	}
 	else
 	{
-		entity->power_up_type = test_power_up_cyan;
+		entity->power_up_type = SPEED_POWER_UP;
 		entity->color = v4(0, 1, 1, 1);
 	}
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
+	entity->entitytype = OBSTACLE_ENTITY;
+
 	int size = 20;
 	int padding = 10;
 	entity->size = v2(size, size);
@@ -198,21 +168,21 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	if (random_value <= 0.30) // 30% chance
 	{
 		// HARD obstacle
-		entity->obstacle_type = HARD_obstacle;
-		entity->obstacle_health = 2;
+		entity->obstacle_type = HARD_OBSTACLE;
+		entity->health = 2;
 	} 
 	else if (random_value <= 0.40)  // 10% chance
 	{
 		// BLOCK obstacle
-		entity->obstacle_type = BLOCK_obstacle;
-		entity->obstacle_health = 9999;
+		entity->obstacle_type = BLOCK_OBSTACLE;
+		entity->health = 9999;
 		entity->size = v2(30, 30);
 	} 
 	else
 	{
 		// BASE obstacle
-		entity->obstacle_type = BASE_obstacle;
-		entity->obstacle_health = 1;
+		entity->obstacle_type = BASE_OBSTACLE;
+		entity->health = 1;
 		float red = 1 - (float)(x_index+1) / n_rows;
 		float blue = (float)(x_index+1) / n_rows;
 		entity->color = v4(red, 0, blue, 1);
@@ -222,7 +192,6 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	obstacle_list[obstacle_count].x = x_index;
 	obstacle_list[obstacle_count].y = y_index;
 	obstacle_count++;
-	entity->is_obstacle = true;
 }
 
 
@@ -274,11 +243,11 @@ void propagate_wave(Entity* hit_obstacle) {
 }
 
 void apply_damage(Entity* obstacle, float damage) {
-	obstacle->obstacle_health -= damage;
+	obstacle->health -= damage;
 
-	if (obstacle->obstacle_health <= 0) {
+	if (obstacle->health <= 0) {
 		// Destroy the obstacle after its health is 0
-		if (obstacle->is_obstacle) {
+		if (obstacle->entitytype == OBSTACLE_ENTITY) {
 			number_of_destroyed_obstacles ++;
 			propagate_wave(obstacle); 
 		}
@@ -317,11 +286,11 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
 
-	if (obstacle->obstacle_type == BASE_obstacle || obstacle->obstacle_type == HARD_obstacle || obstacle->is_power_up) { 
+	if (obstacle->obstacle_type == HARD_OBSTACLE || obstacle->obstacle_type == BASE_OBSTACLE || obstacle->entitytype == POWERUP_ENTITY) { 
 		apply_damage(obstacle, damage);
 	}
 	
-	if (obstacle->obstacle_type == BLOCK_obstacle) 
+	if (obstacle->obstacle_type == BLOCK_OBSTACLE) 
 	{
 		projectile_bounce(projectile, obstacle);
 	} 
@@ -332,27 +301,27 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 }
 
 void apply_power_up(Entity* power_up, Entity* player) {
-	if(power_up->power_up_type == test_power_up_green){
+	if(power_up->power_up_type == IMMORTAL_BOTTOM_POWER_UP){
 		death_zone_bottom = v4(0, 1, 0, 0.5);
 		is_power_up_active = true;
 		timer_power_up = 5.0f;
 	}
-	if(power_up->power_up_type == test_power_up_yellow){
+	if(power_up->power_up_type == IMMORTAL_TOP_POWER_UP){
 		death_zone_top = v4(0, 1, 0, 0.5);
 		is_power_up_active = true;
 		timer_power_up = 5.0f;
 	}
-	if(power_up->power_up_type == test_power_up_blue){
+	if(power_up->power_up_type == EXPAND_POWER_UP){
 		player->size = v2_add(player->size, v2(100, 0));
 		is_power_up_active = true;
 		timer_power_up = 5.0f;
 	}
-	if(power_up->power_up_type == test_power_up_red){
+	if(power_up->power_up_type == HEALTH_POWER_UP){
 		if (number_of_shots_missed > 0) {
 			number_of_shots_missed--;
 		}
 	}
-	if(power_up->power_up_type == test_power_up_cyan){
+	if(power_up->power_up_type == SPEED_POWER_UP){
 		projectile_speed += 500;
 	}
 
@@ -363,16 +332,16 @@ void update_power_up_timer(Entity* player, float delta_t) {
     if (is_power_up_active) {
         timer_power_up -= delta_t;
 
-        if (timer_power_up <= 0 && test_power_up_green) {
+        if (timer_power_up <= 0 && IMMORTAL_BOTTOM_POWER_UP) {
             // Återställ effekten när timern når 0
             death_zone_bottom = v4(1, 0, 0, 0.5);  // Återställ till standardfärg
             is_power_up_active = false;  // Deaktivera power-upen
         }
-		if (timer_power_up <= 0 && test_power_up_yellow) {
+		if (timer_power_up <= 0 && IMMORTAL_TOP_POWER_UP) {
             death_zone_top = v4(1, 0, 0, 0.5); 
             is_power_up_active = false;  
         }
-		if (timer_power_up <= 0 && test_power_up_blue) {
+		if (timer_power_up <= 0 && EXPAND_POWER_UP) {
             player->size = v2_sub(player->size, v2(100, 0));
             is_power_up_active = false; 
 		}
@@ -412,13 +381,11 @@ int entry(int argc, char **argv) {
 	Entity* player = entity_create();
 	setup_player(player);
 
-	int rows_obstacles = 13;
-	int columns_obstacles = 13;
-	for (int i = 0; i < rows_obstacles; i++) { // x
-		for (int j = 0; j < columns_obstacles; j++) { // y
+	for (int x = 0; x < GRID_WIDTH; x++) { // x
+		for (int y = 0; y < GRID_HEIGHT; y++) { // y
 			if (get_random_float64_in_range(0, 1) <= 0.70) {
 				Entity* entity = entity_create();
-				setup_obstacle(entity, i, j, rows_obstacles);
+				setup_obstacle(entity, x, y, GRID_WIDTH);
 			}
 		}
 	}
@@ -437,7 +404,7 @@ int entry(int argc, char **argv) {
         update_power_up_timer(player, delta_t);
 
 		// Mouse Positions
-		mouse_position = screen_to_world();
+		mouse_position = MOUSE_POSITION();
 
 		// main code loop here --------------
 		if (is_key_just_pressed(KEY_TAB)) 
@@ -493,38 +460,32 @@ int entry(int argc, char **argv) {
 
 			entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 
-			if (entity->is_projectile) 
+			if (entity->entitytype == PROJECTILE_ENTITY) 
 			{
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
 					Entity* other_entity = &entities[j];
 
-					if (other_entity->is_obstacle)
-					{
-						if (circle_rect_collision(entity, other_entity)) 
-						{
-							//other_entity->wave_time = 0.0f;
-							handle_projectile_collision(entity, other_entity);
-							break; // Exit after handling the first collision
-						}
-					}
-					if (other_entity->is_player) 
-					{
-						if (circle_rect_collision(entity, other_entity))
-						{
-							handle_projectile_collision(entity, other_entity);
-							break; // Exit after handling the first collision
-						} 
-					}
-					if (other_entity->is_power_up)
-					{
-						if (circle_circle_collision(entity, other_entity)) 
-						{
-							apply_power_up(other_entity, player);
-							handle_projectile_collision(entity, other_entity);
-							number_of_power_ups--;
-                    		break; // Exit after handling the first collision
-						}
+					switch(other_entity->entitytype) {
+						case(PLAYER_ENTITY):
+						case(OBSTACLE_ENTITY): {
+							if (circle_rect_collision(entity, other_entity)) 
+							{
+								//other_entity->wave_time = 0.0f;
+								handle_projectile_collision(entity, other_entity);
+								break;
+							}
+						} break;
+						case(POWERUP_ENTITY): {
+							if (circle_circle_collision(entity, other_entity)) 
+							{
+								apply_power_up(other_entity, player);
+								handle_projectile_collision(entity, other_entity);
+								number_of_power_ups--;
+								break; // Exit after handling the first collision
+							}
+						} break;
+						default: { break; }
 					}
 				}
 				// If projectile bounce on the sidesb
@@ -563,28 +524,28 @@ int entry(int argc, char **argv) {
 			
 			{ // Draw The Entity
 				float64 t = os_get_elapsed_seconds();
-				if (entity->is_projectile || entity->is_power_up) 
+				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
 				{
-					if(entity->is_power_up){
+					if(entity->entitytype == POWERUP_ENTITY){
 						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);
 						float g = 0.2 * sin(10*t) + 0.8;
 						float r = 0.2 * sin(10*t) + 0.8;
 						float b = 0.2 * sin(10*t) + 0.8;
 						switch(entity->power_up_type)
 						{
-							case(test_power_up_green):
+							case(IMMORTAL_BOTTOM_POWER_UP):
 								entity->color = v4(0, g, 0, 1);
 								break;
-							case(test_power_up_yellow):
+							case(IMMORTAL_TOP_POWER_UP):
 								entity->color = v4(r, g, 0, 1);
 								break;
-							case(test_power_up_blue):
+							case(EXPAND_POWER_UP):
 								entity->color = v4(0, 0, b, 1);
 								break;
-							case(test_power_up_red):
+							case(HEALTH_POWER_UP):
 								entity->color = v4(r, 0, 0, 1);
 								break;
-							case(test_power_up_cyan):
+							case(SPEED_POWER_UP):
 								entity->color = v4(0, g, b, 1);
 								break;
 							default: break;
@@ -595,23 +556,23 @@ int entry(int argc, char **argv) {
 					draw_circle(draw_position, entity->size, entity->color);
 				}
 
-				if (entity->is_player || entity->is_obstacle) 
+				if (entity->entitytype == PLAYER_ENTITY || entity->entitytype == OBSTACLE_ENTITY) 
 				{
-					if (entity->is_obstacle) 
+					if (entity->entitytype == OBSTACLE_ENTITY) 
 					{
 						switch(entity->obstacle_type) 
 						{
-							case(HARD_obstacle):
+							case(HARD_OBSTACLE):
 								float r = 0.5 * sin(t + 3*PI32) + 0.5;
 								entity->color = v4(r, 0, 1, 1);
 								break;
-							case(BLOCK_obstacle):
+							case(BLOCK_OBSTACLE):
 								float a = 0.3 * sin(2*t) + 0.7;
 								entity->color = v4(0.2, 0.2, 0.2, a);
 								break;
-							default: break;
+							default: { } break; 
 						}
-						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_obstacle) {
+						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
 							entity->wave_time -= delta_t;
 
 							if (entity->wave_time < 0.0f) {

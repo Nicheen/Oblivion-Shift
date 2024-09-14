@@ -6,7 +6,10 @@
 	],
 	"settings": {
 		"files.associations": {
-			"algorithm": "c"
+			"algorithm": "c",
+			"initializer_list": "c",
+			"utility": "c",
+			"xutility": "c"
 		}
 	}
 }

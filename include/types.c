@@ -1,0 +1,33 @@
+
+typedef enum ObstacleType {
+	NIL_OBSTACLE = 0,
+
+	BASE_OBSTACLE = 1,
+	HARD_OBSTACLE = 2,
+	BLOCK_OBSTACLE = 3,
+
+	MAX_OBSTACLE,
+} ObstacleType;
+	
+typedef enum PowerUpType {
+	NIL_POWER_UP = 0,
+
+	IMMORTAL_BOTTOM_POWER_UP = 1,
+	HEALTH_POWER_UP = 2,
+	EXPAND_POWER_UP = 3,
+	IMMORTAL_TOP_POWER_UP = 4,
+	SPEED_POWER_UP = 5,
+
+	MAX_POWER_UP,
+} PowerUpType;
+
+typedef enum EntityType {
+	NIL_ENTITY = 0,
+
+	PLAYER_ENTITY = 1,
+	PROJECTILE_ENTITY = 2,
+	OBSTACLE_ENTITY = 3,
+	POWERUP_ENTITY = 4,
+
+	MAX_ENTITY,
+} EntityType;
