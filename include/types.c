@@ -19,6 +19,7 @@ typedef enum ObstacleType {
 	BASE_OBSTACLE = 1,
 	HARD_OBSTACLE = 2,
 	BLOCK_OBSTACLE = 3,
+	DROP_OBSTACLE = 4,
 
 	MAX_OBSTACLE,
 } ObstacleType;

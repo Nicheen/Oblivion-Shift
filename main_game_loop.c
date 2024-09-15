@@ -63,6 +63,8 @@ typedef struct Entity {
 	enum ObstacleType obstacle_type;
 	float wave_time;
 	float wave_time_beginning;
+	float drop_interval;
+	float drop_interval_timer;
 	// Projectile
 	int n_bounces;
 	// Power UP
@@ -194,7 +196,6 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 	}
 }
 
-
 void setup_player(Entity* entity) {
 	entity->entitytype = PLAYER_ENTITY;
 
@@ -203,15 +204,24 @@ void setup_player(Entity* entity) {
 	entity->color = COLOR_WHITE;
 }
 
-void setup_projectile(Entity* entity, Entity* player) {
+void summon_projectile_player(Entity* entity, Entity* player) {
 	entity->entitytype = PROJECTILE_ENTITY;
 
-	int setup_y_offset = 30;
+	int setup_y_offset = 10;
 	entity->size = v2(10, 10);
 	entity->position = v2_add(player->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->position.x, player->position.y + setup_y_offset)));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
+}
+
+void summon_projectile_drop(Entity* entity, Entity* obstacle) {
+	entity->entitytype = PROJECTILE_ENTITY;
+
+	entity->size = v2(10, 10);
+	entity->position = v2_add(obstacle->position, v2(0, -20));
+	entity->color = v4(1, 0, 0, 0.5);
+	entity->velocity = v2(0, -98.2);
 }
 
 void setup_power_up(Entity* entity) {
@@ -262,8 +272,14 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	
 	// TODO: Make it more clear which block is harder
 	float random_value = get_random_float64_in_range(0, 1);
-
-	if (random_value <= 0.30) // 30% chance
+	if (random_value <= 0.80 && y_index == 0) 
+	{
+		entity->obstacle_type = DROP_OBSTACLE;
+		entity->health = 1;
+		entity->drop_interval = get_random_float32_in_range(5.0f, 20.0f);
+		entity->drop_interval_timer = 0;
+	}
+	else if (random_value <= 0.30) // 30% chance
 	{
 		// HARD obstacle
 		entity->obstacle_type = HARD_OBSTACLE;
@@ -532,7 +548,7 @@ int entry(int argc, char **argv) {
 				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
 				Entity* projectile = entity_create();
-				setup_projectile(projectile, player);
+				summon_projectile_player(projectile, player);
 
 				number_of_shots_fired++;
 			}
@@ -634,7 +650,8 @@ int entry(int argc, char **argv) {
 				float64 t = os_get_elapsed_seconds();
 				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
 				{
-					if(entity->entitytype == POWERUP_ENTITY){
+					if(entity->entitytype == POWERUP_ENTITY)
+					{
 						entity->position = v2(window.width / 2 * sin(t + random_position_power_up), -100);
 						float g = 0.2 * sin(10*t) + 0.8;
 						float r = 0.2 * sin(10*t) + 0.8;
@@ -670,6 +687,9 @@ int entry(int argc, char **argv) {
 					{
 						switch(entity->obstacle_type) 
 						{
+							case(DROP_OBSTACLE): {
+								entity->color = v4(1, 1, 1, 0.3);
+							} break;
 							case(HARD_OBSTACLE):
 								float r = 0.5 * sin(t + 3*PI32) + 0.5;
 								entity->color = v4(r, 0, 1, 1);
@@ -679,6 +699,21 @@ int entry(int argc, char **argv) {
 								entity->color = v4(0.2, 0.2, 0.2, a);
 								break;
 							default: { } break; 
+						}
+						if (entity->obstacle_type == DROP_OBSTACLE) {
+							
+							if (entity->drop_interval >= entity->drop_interval_timer) {
+								entity->drop_interval_timer += delta_t;
+								float drop_size = 10 * (entity->drop_interval_timer / entity->drop_interval);
+								Vector2 draw_position = v2_sub(entity->position, v2_mulf(v2(drop_size, drop_size), 0.5));
+								draw_circle(draw_position, v2(drop_size, drop_size), v4(1, 0, 0, 0.5));
+							}
+							else
+							{
+								entity->drop_interval_timer = 0.0f;
+								Entity* drop_projectile = entity_create();
+								summon_projectile_drop(drop_projectile, entity);
+							}
 						}
 						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
 							entity->wave_time -= delta_t;
