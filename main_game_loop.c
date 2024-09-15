@@ -515,7 +515,7 @@ void update_power_up_timer(Entity* player, float delta_t) {
             is_power_up_active = false;  
         }
 		if (timer_power_up <= 0 && EXPAND_POWER_UP) {
-            player->size = v2_sub(player->size, v2(100, 0));
+            player->size = v2_sub(player->size, v2(10, 0));
             is_power_up_active = false; 
 		}
     }
