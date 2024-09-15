@@ -1,3 +1,16 @@
+typedef enum ParticleFlags {
+    PARTICLE_FLAGS_valid = (1<<0),
+	PARTICLE_FLAGS_physics = (1<<1),
+	PARTICLE_FLAGS_friction = (1<<2),
+	PARTICLE_FLAGS_fade_out_with_velocity = (1<<3),
+	PARTICLE_FLAGS_gravity = (1<<4),
+	// PARTICLE_FLAGS_bounce = (1<<4),
+} ParticleFlags;
+
+typedef enum ParticleKind {
+	HIT_PFX,
+	BOUNCE_PFX,
+} ParticleKind;
 
 typedef enum ObstacleType {
 	NIL_OBSTACLE = 0,

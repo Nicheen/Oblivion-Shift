@@ -3,6 +3,8 @@
 // -----------------------------------------------------------------------
 #include "include/easings.c"
 #include "include/types.c"
+#include "include/particlesystem.c"
+#include "include/IndependentFunctions.c"
 
 // -----------------------------------------------------------------------
 // GLOBAL VARIABLES (!!!! WE USE #define and capital letters only !!!!)
@@ -25,11 +27,9 @@ bool debug_mode = false;
 bool game_over = false;
 bool is_power_up_active = false;
 Vector2 mouse_position;
-s32 delta_t;
+float64 delta_t;
 
-inline float v2_dist(Vector2 a, Vector2 b) {
-    return v2_length(v2_sub(a, b));
-}
+#define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
 
 Vector2 MOUSE_POSITION() {
 	float mouseX = input_frame.mouse_x;
@@ -71,6 +71,14 @@ typedef struct Entity {
 
 Entity entities[MAX_ENTITY_COUNT];
 
+typedef struct ObstacleTuple {
+	Entity* obstacle;
+	int x;
+	int y;
+} ObstacleTuple;
+ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+int obstacle_count = 0;
+
 Entity* entity_create() {
 	Entity* entity_found = 0;
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -89,13 +97,89 @@ void entity_destroy(Entity* entity) {
 	memset(entity, 0, sizeof(Entity));
 }
 
-typedef struct ObstacleTuple {
-	Entity* obstacle;
-	int x;
-	int y;
-} ObstacleTuple;
-ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
-int obstacle_count = 0;
+void particle_update(float64 delta_t) {
+	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
+		Particle* p = &particles[i];
+		if (!(p->flags & PARTICLE_FLAGS_valid)) {
+			continue;
+		}
+
+		if (p->end_time && has_reached_end_time(os_get_elapsed_seconds(), p->end_time)) {
+			particle_clear(p);
+			continue;
+		}
+
+		if (p->flags & PARTICLE_FLAGS_fade_out_with_velocity && v2_length(p->velocity) < 0.01) {
+			particle_clear(p);
+		}
+
+		if (p->flags & PARTICLE_FLAGS_gravity) {
+			Vector2 gravity = v2(0, -98.2f);
+			p->velocity = v2_add(p->velocity, v2_mulf(gravity, delta_t));
+		}
+
+		if (p->flags & PARTICLE_FLAGS_physics) {
+			if (p->flags & PARTICLE_FLAGS_friction) {
+				p->acceleration = v2_sub(p->acceleration, v2_mulf(p->velocity, p->friction));
+			}
+			p->velocity = v2_add(p->velocity, v2_mulf(p->acceleration, delta_t));
+			Vector2 next_pos = v2_add(p->pos, v2_mulf(p->velocity, delta_t));
+			p->acceleration = (Vector2){0};
+			p->pos = next_pos;
+		}
+	}
+}
+
+void particle_render() {
+	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
+		Particle* p = &particles[i];
+		if (!(p->flags & PARTICLE_FLAGS_valid)) {
+			continue;
+		}
+
+		Vector4 col = p->col;
+		if (p->flags & PARTICLE_FLAGS_fade_out_with_velocity) {
+			col.a *= float_alpha(fabsf(v2_length(p->velocity)), 0, p->fade_out_vel_range);
+		}
+
+		Vector2 draw_position = v2_sub(p->pos, v2_mulf(p->size, 0.5));
+		draw_rect(draw_position, p->size, col);
+	}
+}
+
+void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
+	switch (kind) {
+		case BOUNCE_PFX: {
+			for (int i = 0; i < 4; i++) {
+				Particle* p = particle_new();
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
+				p->pos = pos;
+				p->col = color;
+				p->velocity = v2_normalize(v2(get_random_float32_in_range(-1, 1), get_random_float32_in_range(-1, 1)));
+				p->velocity = v2_mulf(p->velocity, get_random_float32_in_range(200, 200));
+				p->friction = 20.0f;
+				p->fade_out_vel_range = 30.0f;
+				p->size = v2(1, 1);
+			}
+		} break;
+		case HIT_PFX: {
+			for (int i = 0; i < 10; i++) {
+				Particle* p = particle_new();
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity | PARTICLE_FLAGS_gravity;
+				p->pos = pos;
+				p->col = color;
+				p->velocity = v2_normalize(v2(get_random_float32_in_range(-1, 1), get_random_float32_in_range(-1, 1)));
+				p->velocity = v2_mulf(p->velocity, get_random_float32_in_range(100, 200));
+				p->friction = get_random_float32_in_range(30.0f, 30.0f);
+				p->fade_out_vel_range = 30.0f;
+				p->end_time = os_get_elapsed_seconds() + get_random_float32_in_range(1.0f, 2.0f);
+				p->size = v2(3, 3);
+			}
+		} break;
+		default: { log("Something went wrong with particle generation"); } break;
+	}
+}
+
 
 void setup_player(Entity* entity) {
 	entity->entitytype = PLAYER_ENTITY;
@@ -200,6 +284,9 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 // The loop will run multiple of times before the projectile can bounce away.
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
+
+	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
+
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
 	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
 	{
@@ -215,6 +302,9 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 
 void projectile_bounce_world(Entity* projectile) {
 	projectile->n_bounces++;
+
+	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
+
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 }
 
@@ -223,7 +313,6 @@ void propagate_wave(Entity* hit_obstacle) {
 	float wave_speed = 100.0f;
 
     Vector2 hit_position = hit_obstacle->position;
-
     // Iterate over all obstacles to propagate the wave
     for (int i = 0; i < obstacle_count; i++) {
         Entity* current_obstacle = obstacle_list[i].obstacle;
@@ -246,9 +335,9 @@ void apply_damage(Entity* obstacle, float damage) {
 	obstacle->health -= damage;
 
 	if (obstacle->health <= 0) {
+		number_of_destroyed_obstacles ++;
 		// Destroy the obstacle after its health is 0
 		if (obstacle->entitytype == OBSTACLE_ENTITY) {
-			number_of_destroyed_obstacles ++;
 			propagate_wave(obstacle); 
 		}
 		entity_destroy(obstacle);
@@ -465,7 +554,7 @@ int entry(int argc, char **argv) {
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
 					Entity* other_entity = &entities[j];
-
+					if (entity == other_entity) continue;
 					switch(other_entity->entitytype) {
 						case(PLAYER_ENTITY):
 						case(OBSTACLE_ENTITY): {
@@ -479,6 +568,7 @@ int entry(int argc, char **argv) {
 						case(POWERUP_ENTITY): {
 							if (circle_circle_collision(entity, other_entity)) 
 							{
+								particle_emit(other_entity->position, other_entity->color, HIT_PFX);
 								apply_power_up(other_entity, player);
 								handle_projectile_collision(entity, other_entity);
 								number_of_power_ups--;
@@ -644,7 +734,8 @@ int entry(int argc, char **argv) {
 		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, death_zone_top);
 		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, death_zone_bottom);
 		
-		// main code loop here --------------a
+		particle_update(delta_t);
+		particle_render();
 		os_update(); 
 		gfx_update();
 		seconds_counter += delta_t;
