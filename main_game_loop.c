@@ -176,6 +176,20 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 				p->size = v2(3, 3);
 			}
 		} break;
+		case HARD_OBSTACLE_PFX: {
+			for (int i = 0; i < 1; i++) {
+				Particle* p = particle_new();
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
+				p->pos = pos;
+				p->col = color;
+				p->velocity = v2_normalize(v2(get_random_float32_in_range(-1, 1), get_random_float32_in_range(-1, 1)));
+				p->velocity = v2_mulf(p->velocity, get_random_float32_in_range(100, 200));
+				p->friction = get_random_float32_in_range(30.0f, 30.0f);
+				p->fade_out_vel_range = 30.0f;
+				p->end_time = os_get_elapsed_seconds() + get_random_float32_in_range(1.0f, 2.0f);
+				p->size = v2(3, 3);
+			}
+		} break;
 		default: { log("Something went wrong with particle generation"); } break;
 	}
 }
@@ -278,10 +292,6 @@ void setup_obstacle(Entity* entity, int x_index, int y_index, int n_rows) {
 	obstacle_count++;
 }
 
-
-// TODO: implement projectile_bounce for obstacles with health > 1
-// Problem arises with calculating damage when projectile survives
-// The loop will run multiple of times before the projectile can bounce away.
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
 
@@ -390,30 +400,38 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 }
 
 void apply_power_up(Entity* power_up, Entity* player) {
-	if(power_up->power_up_type == IMMORTAL_BOTTOM_POWER_UP){
-		death_zone_bottom = v4(0, 1, 0, 0.5);
-		is_power_up_active = true;
-		timer_power_up = 5.0f;
-	}
-	if(power_up->power_up_type == IMMORTAL_TOP_POWER_UP){
-		death_zone_top = v4(0, 1, 0, 0.5);
-		is_power_up_active = true;
-		timer_power_up = 5.0f;
-	}
-	if(power_up->power_up_type == EXPAND_POWER_UP){
-		player->size = v2_add(player->size, v2(100, 0));
-		is_power_up_active = true;
-		timer_power_up = 5.0f;
-	}
-	if(power_up->power_up_type == HEALTH_POWER_UP){
-		if (number_of_shots_missed > 0) {
-			number_of_shots_missed--;
-		}
-	}
-	if(power_up->power_up_type == SPEED_POWER_UP){
-		projectile_speed += 500;
-	}
+	switch(power_up->power_up_type) 
+	{
+		case(IMMORTAL_BOTTOM_POWER_UP): {
+			death_zone_bottom = v4(0, 1, 0, 0.5);
+			is_power_up_active = true;
+			timer_power_up = 5.0f;
+		} break;
 
+		case(IMMORTAL_TOP_POWER_UP): {
+			death_zone_top = v4(0, 1, 0, 0.5);
+			is_power_up_active = true;
+			timer_power_up = 5.0f;
+		} break;
+
+		case(EXPAND_POWER_UP): {
+			player->size = v2_add(player->size, v2(10, 0));
+			is_power_up_active = true;
+			timer_power_up = 5.0f;
+		} break;
+		
+		case(HEALTH_POWER_UP): {
+			if (number_of_shots_missed > 0) {
+				number_of_shots_missed--;
+			}
+		} break;
+
+		case(SPEED_POWER_UP): {
+			projectile_speed += 50;
+		} break;
+
+		default: { log("Something went wrong with powerups!"); } break;
+	}
 }
 
 void update_power_up_timer(Entity* player, float delta_t) {
@@ -688,6 +706,11 @@ int entry(int argc, char **argv) {
 							Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 							draw_rect(draw_position, entity->size, entity->color);
 						}
+						if (entity->obstacle_type == HARD_OBSTACLE) {
+							if (get_random_float32_in_range(0, 1) <= 0.01) {
+								particle_emit(entity->position, v4(1, 1, 1, 0.8), HARD_OBSTACLE_PFX);
+							}
+						}
 					}
 					else
 					{
@@ -732,7 +755,7 @@ int entry(int argc, char **argv) {
 
 		float wave = 15*(sin(now) + 1);
 		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, death_zone_top);
-		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, death_zone_bottom);
+		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, v4(0, (float)84/255, (float)119/225, 1));
 		
 		particle_update(delta_t);
 		particle_render();

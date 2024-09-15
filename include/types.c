@@ -10,6 +10,7 @@ typedef enum ParticleFlags {
 typedef enum ParticleKind {
 	HIT_PFX,
 	BOUNCE_PFX,
+	HARD_OBSTACLE_PFX,
 } ParticleKind;
 
 typedef enum ObstacleType {
