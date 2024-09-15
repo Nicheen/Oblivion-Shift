@@ -8,7 +8,7 @@ typedef enum ParticleFlags {
 } ParticleFlags;
 
 typedef enum ParticleKind {
-	HIT_PFX,
+	POWERUP_PFX,
 	BOUNCE_PFX,
 	HARD_OBSTACLE_PFX,
 } ParticleKind;
