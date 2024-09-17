@@ -242,6 +242,7 @@ void summon_projectile_player(Entity* entity, Entity* player) {
 
 	int setup_y_offset = 20;
 	entity->size = v2(10, 10);
+	entity->health = 1;
 	entity->position = v2_add(player->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->position.x, player->position.y + setup_y_offset)));
@@ -252,6 +253,7 @@ void summon_projectile_drop(Entity* entity, Entity* obstacle) {
 	entity->entitytype = PROJECTILE_ENTITY;
 
 	entity->size = v2(10, 10);
+	entity->health = 1;
 	entity->position = v2_add(obstacle->position, v2(0, -20));
 	entity->color = v4(1, 0, 0, 0.5);
 	entity->velocity = v2(0, -50);
@@ -310,7 +312,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	{
 		entity->obstacle_type = DROP_OBSTACLE;
 		entity->health = 1;
-		entity->drop_interval = get_random_float32_in_range(20.0f, 40.0f);
+		entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
 		entity->drop_interval_timer = 0;
 	}
 	else if (random_value <= 0.30) // 30% chance
@@ -449,7 +451,15 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
 
-	if (obstacle->obstacle_type == HARD_OBSTACLE || obstacle->obstacle_type == BASE_OBSTACLE || obstacle->obstacle_type == DROP_OBSTACLE || obstacle->entitytype == POWERUP_ENTITY) { 
+	if 
+	(
+	obstacle->obstacle_type == HARD_OBSTACLE ||
+	obstacle->obstacle_type == BASE_OBSTACLE ||
+	obstacle->obstacle_type == DROP_OBSTACLE ||
+	obstacle->entitytype == POWERUP_ENTITY   ||
+	obstacle->entitytype == PROJECTILE_ENTITY
+	) 
+	{ 
 		apply_damage(obstacle, damage);
 	}
 	
@@ -462,7 +472,6 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 		entity_destroy(projectile);
 	}
 }
-
 void apply_power_up(Entity* power_up, Entity* player) {
 	switch(power_up->power_up_type) 
 	{
@@ -650,6 +659,13 @@ int entry(int argc, char **argv) {
 								break;
 							}
 						} break;
+						case(PROJECTILE_ENTITY): {
+							if (circle_circle_collision(entity, other_entity))
+							{
+								particle_emit(other_entity->position, other_entity->color, POWERUP_PFX);
+								handle_projectile_collision(entity, other_entity);
+							} break;
+						}
 						case(POWERUP_ENTITY): {
 							if (circle_circle_collision(entity, other_entity)) 
 							{
@@ -729,12 +745,15 @@ int entry(int argc, char **argv) {
 							if (check_clearance_below(obstacle_list, obstacle_count, x, y)) {
 								if (entity->drop_interval >= entity->drop_interval_timer) {
 									entity->drop_interval_timer += delta_t;
-									float drop_size = 10 * (entity->drop_interval_timer / entity->drop_interval);
+									float drop_alpha = (entity->drop_interval_timer / entity->drop_interval);
+									float drop_size = 10 * drop_alpha;
+									Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
 									Vector2 draw_position = v2_sub(entity->position, v2_mulf(v2(drop_size, drop_size), 0.5));
-									draw_circle(draw_position, v2(drop_size, drop_size), v4(1, 0, 0, 0.5));
+									draw_circle(draw_position, v2(drop_size, drop_size), drop_color);
 								}
 								else
 								{
+									entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
 									entity->drop_interval_timer = 0.0f;
 									Entity* drop_projectile = entity_create();
 									summon_projectile_drop(drop_projectile, entity);
