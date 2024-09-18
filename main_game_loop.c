@@ -471,10 +471,12 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	if (obstacle->obstacle_type == BLOCK_OBSTACLE) 
 	{
 		projectile_bounce(projectile, obstacle);
+		play_one_audio_clip(STR("res/sound_effects/thud1.wav"));
 	} 
 	else
 	{
 		entity_destroy(projectile);
+		play_one_audio_clip(STR("res/sound_effects/blop.wav"));
 	}
 }
 void apply_power_up(Entity* power_up, Entity* player) {
@@ -542,6 +544,9 @@ void reset_values() {
 	number_of_shots_fired = 0;
 	number_of_shots_missed = 0;
 }
+
+
+
 
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
