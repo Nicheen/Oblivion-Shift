@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------
 // IMPORTS LOCAL FILES ONLY
 // -----------------------------------------------------------------------
+#include "include/config.c"
 #include "include/easings.c"
 #include "include/types.c"
 #include "include/particlesystem.c"
@@ -66,6 +67,7 @@ typedef struct Entity {
 	float wave_time_beginning;
 	float drop_interval;
 	float drop_interval_timer;
+	float drop_duration_time;
 	Vector2 grid_position;
 	// Projectile
 	int n_bounces;
@@ -308,36 +310,39 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	
 	// TODO: Make it more clear which block is harder
 	float random_value = get_random_float64_in_range(0, 1);
-	if (random_value <= 0.05) 
+
+	// Check for Drop Obstacle (20% chance)
+	if (random_value <= SPAWN_RATE_DROP_OBSTACLE) 
 	{
 		entity->obstacle_type = DROP_OBSTACLE;
 		entity->health = 1;
 		entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
+		entity->drop_duration_time = get_random_float32_in_range(3.0f, 5.0f);
 		entity->drop_interval_timer = 0;
-	}
-	else if (random_value <= 0.30) // 30% chance
+	} 
+	// Check for Hard Obstacle (next 20% chance, i.e., 0.2 < random_value <= 0.4)
+	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE) 
 	{
-		// HARD obstacle
 		entity->obstacle_type = HARD_OBSTACLE;
 		entity->health = 2;
 	} 
-	else if (random_value <= 0.40)  // 10% chance
+	// Check for Block Obstacle (next 10% chance, i.e., 0.4 < random_value <= 0.5)
+	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) 
 	{
-		// BLOCK obstacle
 		entity->obstacle_type = BLOCK_OBSTACLE;
 		entity->health = 9999;
 		entity->size = v2(30, 30);
 	} 
-	else
+	// If none of the above, spawn the Base Obstacle (remaining 50%)
+	else 
 	{
-		// BASE obstacle
 		entity->obstacle_type = BASE_OBSTACLE;
 		entity->health = 1;
 		float red = 1 - (float)(x_index+1) / GRID_WIDTH;
 		float blue = (float)(x_index+1) / GRID_WIDTH;
 		entity->color = v4(red, 0, blue, 1);
 	}
-	
+
 	obstacle_list[obstacle_count].obstacle = entity;
 	obstacle_list[obstacle_count].x = x_index;
 	obstacle_list[obstacle_count].y = y_index;
@@ -566,7 +571,7 @@ int entry(int argc, char **argv) {
 
 	for (int x = 0; x < GRID_WIDTH; x++) { // x
 		for (int y = 0; y < GRID_HEIGHT; y++) { // y
-			if (get_random_float64_in_range(0, 1) <= 0.70) {
+			if (get_random_float64_in_range(0, 1) <= SPAWN_RATE_ALL_OBSTACLES) {
 				Entity* entity = entity_create();
 				setup_obstacle(entity, x, y);
 			}
@@ -745,11 +750,16 @@ int entry(int argc, char **argv) {
 							if (check_clearance_below(obstacle_list, obstacle_count, x, y)) {
 								if (entity->drop_interval >= entity->drop_interval_timer) {
 									entity->drop_interval_timer += delta_t;
-									float drop_alpha = (entity->drop_interval_timer / entity->drop_interval);
-									float drop_size = 10 * drop_alpha;
-									Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
-									Vector2 draw_position = v2_sub(entity->position, v2_mulf(v2(drop_size, drop_size), 0.5));
-									draw_circle(draw_position, v2(drop_size, drop_size), drop_color);
+									
+									float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
+
+									if (drop_time_left < entity->drop_duration_time) {
+										float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
+										float drop_size = 10 * drop_alpha;
+										Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
+										Vector2 draw_position = v2_sub(entity->position, v2_mulf(v2(drop_size, drop_size), 0.5));
+										draw_circle(draw_position, v2(drop_size, drop_size), drop_color);
+									}
 								}
 								else
 								{
