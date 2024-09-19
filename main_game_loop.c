@@ -298,6 +298,26 @@ void setup_power_up(Entity* entity) {
 	}
 }
 
+void summon_power_up_drop(Entity* entity, Entity* obstacle) {
+	entity->entitytype = POWERUP_ENTITY;
+
+	int size = 25;
+	entity->size = v2(size, size);
+	entity->health = 1;
+	number_of_power_ups++;
+	entity->position = v2_add(obstacle->position, v2(0, -20));
+}
+void power_up_drop(Entity* entity){
+	entity->entitytype = OBSTACLE_ENTITY;
+
+	Entity* power_up = entity_create();
+	float random_value = get_random_float64_in_range(0, 1);
+	if (random_value < 0.1){
+		summon_power_up_drop(power_up, entity);
+	}
+	
+}
+
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = OBSTACLE_ENTITY;
 
@@ -471,6 +491,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	if (obstacle->obstacle_type == BLOCK_OBSTACLE) 
 	{
 		projectile_bounce(projectile, obstacle);
+		power_up_drop(obstacle);
 		play_one_audio_clip(STR("res/sound_effects/thud1.wav"));
 	} 
 	else
@@ -666,6 +687,7 @@ int entry(int argc, char **argv) {
 							{
 								//other_entity->wave_time = 0.0f;
 								handle_projectile_collision(entity, other_entity);
+								power_up_drop(other_entity);
 								break;
 							}
 						} break;
