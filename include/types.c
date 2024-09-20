@@ -20,10 +20,16 @@ typedef enum ObstacleType {
 	HARD_OBSTACLE = 2,
 	BLOCK_OBSTACLE = 3,
 	DROP_OBSTACLE = 4,
+	POWERUP_OBSTACLE = 5,
 
 	MAX_OBSTACLE,
 } ObstacleType;
 	
+typedef enum PowerUpSpawn {
+	POWER_UP_SPAWN_WORLD = 0,
+	POWER_UP_SPAWN_IN_OBSTACLE = 1
+} PowerUpSpawn;
+
 typedef enum PowerUpType {
 	NIL_POWER_UP = 0,
 
