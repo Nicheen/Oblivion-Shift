@@ -16,8 +16,11 @@
 #define GRID_HEIGHT 13
 #define BOUNCE_THRESHOLD 200.0f  // Hastighet som krävs för att studsa
 #define BOUNCE_DAMPING 0.5f  // Dämpning av hastigheten efter studsen
+<<<<<<< HEAD
 #define MAX_DEBUFF_COUNT 20
 // TODO: Bugg, flera entities förstörs när man skjuter en drop. Samt så förstörs [0, 0] av obstacles när en powerup tas upp.
+=======
+>>>>>>> 46cafdf7866319407dc67b58179589cb1be7dbdc
 
 // TODO: try to remove the need for global variables
 int number_of_destroyed_obstacles = 0;
@@ -546,6 +549,7 @@ void apply_damage(Entity* entity, float damage) {
 		number_of_destroyed_obstacles ++;
 		
 		if (entity->entitytype == OBSTACLE_ENTITY) {
+			number_of_destroyed_obstacles ++;
 			propagate_wave(entity);
 
 			if (entity->obstacle_type == POWERUP_OBSTACLE) {
