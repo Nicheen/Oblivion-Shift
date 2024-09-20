@@ -525,9 +525,8 @@ void apply_damage(Entity* entity, float damage) {
 	entity->health -= damage;
 
 	if (entity->health <= 0) {
-		number_of_destroyed_obstacles ++;
-		
 		if (entity->entitytype == OBSTACLE_ENTITY) {
+			number_of_destroyed_obstacles ++;
 			propagate_wave(entity);
 
 			if (entity->obstacle_type == POWERUP_OBSTACLE) {
