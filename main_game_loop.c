@@ -16,7 +16,7 @@
 #define GRID_HEIGHT 13
 #define BOUNCE_THRESHOLD 200.0f  // Hastighet som krävs för att studsa
 #define BOUNCE_DAMPING 0.5f  // Dämpning av hastigheten efter studsen
-
+#define MAX_DEBUFF_COUNT 20
 // TODO: Bugg, flera entities förstörs när man skjuter en drop. Samt så förstörs [0, 0] av obstacles när en powerup tas upp.
 
 // TODO: try to remove the need for global variables
@@ -79,7 +79,6 @@ typedef struct Entity {
 	enum PowerUpType power_up_type;
 	enum PowerUpSpawn power_up_spawn;
 } Entity;
-
 Entity entities[MAX_ENTITY_COUNT];
 
 typedef struct ObstacleTuple {
@@ -346,6 +345,25 @@ void update_player_position(Entity* player, float delta_t) {
     }
 }
 
+void play_random_blop_sound() {
+    // Slumpa ett tal mellan 0 och 3
+    int random_sound = rand() % 4;
+
+    switch (random_sound) {
+        case 0:
+            play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
+            break;
+        case 1:
+            play_one_audio_clip(STR("res/sound_effects/blop2.wav"));
+            break;
+        case 2:
+            play_one_audio_clip(STR("res/sound_effects/blop3.wav"));
+            break;
+        case 3:
+            play_one_audio_clip(STR("res/sound_effects/blop4.wav"));
+            break;
+    }
+}
 
 
 void summon_projectile_player(Entity* entity, Entity* player) {
@@ -494,7 +512,7 @@ void projectile_bounce_world(Entity* projectile) {
 	projectile->n_bounces++;
 
 	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
-
+	play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 }
 
@@ -594,7 +612,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	{
 		if (!(obstacle->entitytype == PLAYER_ENTITY)) apply_damage(obstacle, damage);
 		entity_destroy(projectile);
-		play_one_audio_clip(STR("res/sound_effects/blop.wav"));
+		play_random_blop_sound();
 	}
 }
 
