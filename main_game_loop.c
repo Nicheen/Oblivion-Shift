@@ -14,6 +14,8 @@
 #define PLAYABLE_WIDTH 400
 #define GRID_WIDTH 13
 #define GRID_HEIGHT 13
+#define BOUNCE_THRESHOLD 200.0f  // Hastighet som krävs för att studsa
+#define BOUNCE_DAMPING 0.5f  // Dämpning av hastigheten efter studsen
 
 // TODO: Bugg, flera entities förstörs när man skjuter en drop. Samt så förstörs [0, 0] av obstacles när en powerup tas upp.
 
@@ -241,6 +243,110 @@ void setup_player(Entity* entity) {
 	entity->position = v2(0, -300);
 	entity->color = COLOR_WHITE;
 }
+
+//Movement
+// Konstanter för rörelse
+const float MAX_SPEED = 500.0f;      // Max hastighet
+const float ACCELERATION = 2500.0f;  // Hur snabbt plattformen accelererar
+const float DECELERATION = 5000.0f;  // Hur snabbt plattformen bromsar in
+const float MIN_SPEED_THRESHOLD = 1.0f;  // Tröskel för när vi ska stoppa helt
+
+// Variabel för spelarens hastighet
+Vector2 velocity;
+
+void update_player_position(Entity* player, float delta_t) {
+    Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
+    bool moving = false;
+    static int previous_input = -1;  // -1: ingen riktning, 0: vänster, 1: höger
+
+    // Kontrollera om vänster knapp trycks ned
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->position.x > -PLAYABLE_WIDTH / 2 + player->size.x / 2) {
+        input_axis.x -= 1.0f;
+        moving = true;
+
+        // Om tidigare input var höger, decelerera först innan vi byter riktning
+        if (previous_input == 1 && velocity.x > 0) {
+            velocity.x -= DECELERATION * delta_t;
+            if (velocity.x < 0) velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
+            return;  // Vänta tills vi bromsat in helt
+        }
+        previous_input = 0;  // Uppdatera riktningen till vänster
+    }
+
+    // Kontrollera om höger knapp trycks ned
+    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->position.x < PLAYABLE_WIDTH / 2 - player->size.x / 2) {
+        input_axis.x += 1.0f;
+        moving = true;
+
+        // Om tidigare input var vänster, decelerera först innan vi byter riktning
+        if (previous_input == 0 && velocity.x < 0) {
+            velocity.x += DECELERATION * delta_t;
+            if (velocity.x > 0) velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
+            return;  // Vänta tills vi bromsat in helt
+        }
+        previous_input = 1;  // Uppdatera riktningen till höger
+    }
+
+    // Om både vänster och höger trycks ned samtidigt
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && (is_key_down('D') || is_key_down(KEY_ARROW_RIGHT))) {
+        input_axis.x = 0;  // Om båda trycks, sluta röra dig
+        moving = false;
+        previous_input = -1;  // Ingen aktiv rörelse
+    }
+
+    // Normalisera input_axis för att säkerställa korrekt riktning
+    input_axis = v2_normalize(input_axis);
+
+    // Acceleration
+    if (moving) {
+        // Om vi rör oss, accelerera
+        velocity = v2_add(velocity, v2_mulf(input_axis, ACCELERATION * delta_t));
+
+        // Begränsa hastigheten till maxhastigheten
+        if (v2_length(velocity) > MAX_SPEED) {
+            velocity = v2_mulf(v2_normalize(velocity), MAX_SPEED);
+        }
+    } else {
+        // Deceleration om ingen knapp trycks ned
+        if (v2_length(velocity) > MIN_SPEED_THRESHOLD) {
+            Vector2 decel_vector = v2_mulf(v2_normalize(velocity), -DECELERATION * delta_t);
+            velocity = v2_add(velocity, decel_vector);
+
+            // Om hastigheten närmar sig 0, stoppa helt
+            if (v2_length(velocity) < MIN_SPEED_THRESHOLD) {
+                velocity = v2(0, 0);
+            }
+        }
+    }
+
+    // Uppdatera spelarens position med aktuell hastighet
+    player->position = v2_add(player->position, v2_mulf(velocity, delta_t));
+
+    // Begränsa spelarens position inom spelområdet
+    if (player->position.x > PLAYABLE_WIDTH / 2 - player->size.x / 2) {
+        player->position.x = PLAYABLE_WIDTH / 2 - player->size.x / 2;
+
+        // Om hastigheten är tillräckligt hög, studsa tillbaka
+        if (fabs(velocity.x) > BOUNCE_THRESHOLD) {
+            velocity.x = -velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        } else {
+            velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+        }
+    }
+
+    if (player->position.x < -PLAYABLE_WIDTH / 2 + player->size.x / 2) {
+        player->position.x = -PLAYABLE_WIDTH / 2 + player->size.x / 2;
+
+        // Om hastigheten är tillräckligt hög, studsa tillbaka
+        if (fabs(velocity.x) > BOUNCE_THRESHOLD) {
+            velocity.x = -velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        } else {
+            velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+        }
+    }
+}
+
+
 
 void summon_projectile_player(Entity* entity, Entity* player) {
 	entity->entitytype = PROJECTILE_ENTITY;
@@ -637,21 +743,8 @@ int entry(int argc, char **argv) {
 				Entity* power_up = entity_create();
 				setup_power_up(power_up);
 			}
-
-			Vector2 input_axis = v2(0, 0); // Create an empty 2-dim vector
 			
-			if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->position.x > -PLAYABLE_WIDTH / 2 + player->size.x / 2)
-			{
-				input_axis.x -= 1.0;
-			}
-
-			if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->position.x <  PLAYABLE_WIDTH / 2 - player->size.x / 2)
-			{
-				input_axis.x += 1.0;
-			}
-			
-			input_axis = v2_normalize(input_axis);
-			player->position = v2_add(player->position, v2_mulf(input_axis, 500.0 * delta_t));
+			update_player_position(player, delta_t);
 		}
 
 		// Entity Loop for drawing and everything else
