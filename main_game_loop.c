@@ -79,15 +79,20 @@ typedef struct Entity {
 	enum PowerUpType power_up_type;
 	enum PowerUpSpawn power_up_spawn;
 } Entity;
-Entity entities[MAX_ENTITY_COUNT];
 
 typedef struct ObstacleTuple {
 	Entity* obstacle;
 	int x;
 	int y;
 } ObstacleTuple;
-ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+
 int obstacle_count = 0;
+
+typedef struct World {
+	Entity entities[MAX_ENTITY_COUNT];
+	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+} World;
+World* world = 0;
 
 // Function to check clearance below a tile
 int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
@@ -123,7 +128,7 @@ int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int
 Entity* entity_create() {
 	Entity* entity_found = 0;
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-		Entity* existing_entity = &entities[i];
+		Entity* existing_entity = &world->entities[i];
 		if (!existing_entity->is_valid) {
 			entity_found = existing_entity;
 			break;
@@ -484,9 +489,9 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->color = v4(red, 0, blue, 1);
 	}
 
-	obstacle_list[obstacle_count].obstacle = entity;
-	obstacle_list[obstacle_count].x = x_index;
-	obstacle_list[obstacle_count].y = y_index;
+	world->obstacle_list[obstacle_count].obstacle = entity;
+	world->obstacle_list[obstacle_count].x = x_index;
+	world->obstacle_list[obstacle_count].y = y_index;
 	obstacle_count++;
 }
 
@@ -523,7 +528,7 @@ void propagate_wave(Entity* hit_obstacle) {
     Vector2 hit_position = hit_obstacle->position;
     // Iterate over all obstacles to propagate the wave
     for (int i = 0; i < obstacle_count; i++) {
-        Entity* current_obstacle = obstacle_list[i].obstacle;
+        Entity* current_obstacle = world->obstacle_list[i].obstacle;
 		
         if (current_obstacle != hit_obstacle) {  // Skip the hit obstacle itself
             float distance = v2_dist(hit_position, current_obstacle->position);
@@ -556,10 +561,10 @@ void apply_damage(Entity* entity, float damage) {
 			int x = position.x;
 			int y = position.y;
 
-			// Find the corresponding tuple in obstacle_list and nullify the obstacle
+			// Find the corresponding tuple in world->obstacle_list and nullify the obstacle
 			for (int i = 0; i < obstacle_count; i++) {
-				if (obstacle_list[i].x == x && obstacle_list[i].y == y) {
-					entity_destroy(obstacle_list[i].obstacle);  // Nullify the obstacle
+				if (world->obstacle_list[i].x == x && world->obstacle_list[i].y == y) {
+					entity_destroy(world->obstacle_list[i].obstacle);  // Nullify the obstacle
 					break;
 				}
 			}
@@ -696,6 +701,8 @@ int entry(int argc, char **argv) {
 	int latest_fps;
 	int latest_entites;
 	float64 last_time = os_get_elapsed_seconds();
+
+	world = alloc(get_heap_allocator(), sizeof(World));
 	
 	Gfx_Font *font = load_font_from_disk(STR("C:/Windows/Fonts/arial.ttf"), get_heap_allocator());
 	assert(font, "Failed loading arial.ttf");
@@ -767,7 +774,7 @@ int entry(int argc, char **argv) {
 		// Entity Loop for drawing and everything else
 		int entity_counter = 0;
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
-			Entity* entity = &entities[i];
+			Entity* entity = &world->entities[i];
 			if (!entity->is_valid) continue;
 			entity_counter++;
 
@@ -778,7 +785,7 @@ int entry(int argc, char **argv) {
 				bool collision = false;
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
-					Entity* other_entity = &entities[j];
+					Entity* other_entity = &world->entities[j];
 					if (entity == other_entity) continue;
 					if (collision) break;
 					switch(other_entity->entitytype) {
@@ -879,7 +886,7 @@ int entry(int argc, char **argv) {
 						if (entity->obstacle_type == DROP_OBSTACLE) {
 							int x = entity->grid_position.x;
 							int y = entity->grid_position.y;
-							if (check_clearance_below(obstacle_list, obstacle_count, x, y)) {
+							if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
 								if (entity->drop_interval >= entity->drop_interval_timer) {
 									entity->drop_interval_timer += delta_t;
 									
@@ -952,7 +959,7 @@ int entry(int argc, char **argv) {
 		int n_obstacles = 0;
 		if (debug_mode) {
 			for (int i = 0; i < obstacle_count; i++) {
-				if (obstacle_list[i].obstacle != NULL && obstacle_list[i].obstacle->obstacle_type != NIL_OBSTACLE) {
+				if (world->obstacle_list[i].obstacle != NULL && world->obstacle_list[i].obstacle->obstacle_type != NIL_OBSTACLE) {
 					n_obstacles++;
 				}
 			}
@@ -964,7 +971,7 @@ int entry(int argc, char **argv) {
 			draw_text(font, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
-				Entity* entity = &entities[i];
+				Entity* entity = &world->entities[i];
 				if (!entity->is_valid) continue;
 				if (!(entity->entitytype == PLAYER_ENTITY) && !(entity->obstacle_type == BLOCK_OBSTACLE)) {
 					draw_text(font, sprint(get_temporary_allocator(), STR("%i"), entity->health), font_height, v2_sub(entity->position, v2_mulf(entity->size, 0.5)), v2(0.2, 0.2), COLOR_GREEN);
