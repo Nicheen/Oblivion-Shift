@@ -32,6 +32,8 @@ bool mercy_top;
 bool debug_mode = true;
 bool game_over = false;
 bool is_power_up_active = false;
+bool is_main_menu_active = false;
+bool is_game_paused = false;
 Vector2 mouse_position;
 float64 delta_t;
 
@@ -678,12 +680,70 @@ void update_power_up_timer(Entity* player, float delta_t) {
     }
 }
 
-// TODO: Better system for this
-// Maybe have a world struct which holds all world variables?
-void reset_values() {
-	number_of_destroyed_obstacles = 0;
-	number_of_shots_fired = 0;
-	number_of_shots_missed = 0;
+bool draw_button(Gfx_Font* font_light, const char* text, Vector2 position) {
+    Vector2 size = v2(200, 50);  // Set button size
+    Vector2 mouse_pos = MOUSE_POSITION();  // Get current mouse position
+
+    // Define button color and hover effect
+    Vector4 button_color = v4(0.2, 0.2, 0.8, 1); // Normal color
+    Vector4 hover_color = v4(0.5, 0.5, 1.0, 1); // Hover color
+    Vector4 current_color = button_color;
+
+    // Check if mouse is over the button
+    if (mouse_pos.x >= position.x && mouse_pos.x <= position.x + size.x &&
+        mouse_pos.y >= position.y && mouse_pos.y <= position.y + size.y) {
+        current_color = hover_color;  // Change color on hover
+
+        // Check for click
+        if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
+            return true;  // Button was clicked
+        }
+    }
+
+    // Draw the button background
+    draw_rect(position, size, current_color);
+
+    // Approximate text size
+    int text_length = strlen(text);  // Get the number of characters in the text
+    float average_char_width = font_size * 1.0f;  // Estimate average character width (0.6 is a rough multiplier)
+    float text_width = text_length * average_char_width;  // Calculate text width
+    float text_height = font_size;  // Set text height equal to the font size
+
+    // Calculate text position for centering
+    Vector2 text_position;
+    text_position.x = position.x + (size.x - text_width) / 2;  // Center horizontally
+    text_position.y = position.y + (size.y - text_height) / 2;  // Center vertically
+
+    // Draw the button label centered
+    draw_text(font_light, sprint(get_temporary_allocator(), STR(text)), font_size, text_position, v2(1, 1), COLOR_WHITE);  
+
+    return false;  // Button was not clicked
+}
+
+
+void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
+	if (is_main_menu_active) {
+		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		draw_text(font_bold, sprint(get_temporary_allocator(), STR("Main Menu")), 48, v2(-75, 75), v2(1, 1), COLOR_WHITE);
+
+		// Play Option
+		if (draw_button(font_light, "Play", v2(-100, 0))) {
+			is_main_menu_active = false;  // Close menu
+        	is_game_paused = false;       // Resume game
+		}
+
+		// Settings Option
+		if (draw_button(font_light, "Settings", v2(-100, -50))) {
+			// Open settings screen (not implemented)
+		}
+
+		// Quit Option
+		if (draw_button(font_light, "Quit", v2(-100, -100))) {
+			number_of_destroyed_obstacles = 0;
+			number_of_shots_fired = 0;
+			number_of_shots_missed = 0;
+		}
+	}
 }
 
 int entry(int argc, char **argv) {
@@ -703,12 +763,18 @@ int entry(int argc, char **argv) {
 	float64 last_time = os_get_elapsed_seconds();
 
 	world = alloc(get_heap_allocator(), sizeof(World));
-	
-	Gfx_Font *font = load_font_from_disk(STR("C:/Windows/Fonts/arial.ttf"), get_heap_allocator());
-	assert(font, "Failed loading arial.ttf");
-	const u32 font_height = 48;
+	memset(world, 0, sizeof(World));
 
+	const u32 font_height = 48;
+	
+	Gfx_Font *font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
+	assert(font_light, "Failed loading './res/fonts/Abaddon Light.ttf'");
+
+	Gfx_Font *font_bold = load_font_from_disk(STR("./res/fonts/Abaddon Bold.ttf"), get_heap_allocator());
+	assert(font_light, "Failed loading './res/fonts/Abaddon Bold.ttf'");
+	
 	Gfx_Image* heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
+	assert(heart_sprite, "Failed loading 'res/textures/heart.png'");
 	
 	// Here we create the player entity object
 	Entity* player = entity_create();
@@ -733,9 +799,6 @@ int entry(int argc, char **argv) {
 		float64 delta_t = now - last_time;
 		last_time = now;
 
-		// Uppdatera timern för power-up
-        update_power_up_timer(player, delta_t);
-
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
 
@@ -746,11 +809,13 @@ int entry(int argc, char **argv) {
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
 
-		if (is_key_just_pressed(KEY_ESCAPE) && game_over) {
-			reset_values();
+		if (is_key_just_pressed(KEY_ESCAPE)) {
+			consume_key_just_pressed(KEY_ESCAPE);
+			is_main_menu_active = !is_main_menu_active; // Toggle menu on/off
+			is_game_paused = is_main_menu_active;       // Pause game when menu is up
 		}
 
-		if (player->is_valid && !game_over)
+		if (player->is_valid && !game_over && !is_game_paused)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
@@ -771,6 +836,9 @@ int entry(int argc, char **argv) {
 			update_player_position(player, delta_t);
 		}
 
+		// Uppdatera timern för power-up
+        update_power_up_timer(player, delta_t);
+
 		// Entity Loop for drawing and everything else
 		int entity_counter = 0;
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
@@ -778,7 +846,7 @@ int entry(int argc, char **argv) {
 			if (!entity->is_valid) continue;
 			entity_counter++;
 
-			entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
+			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 
 			if (entity->entitytype == PROJECTILE_ENTITY) 
 			{
@@ -847,7 +915,7 @@ int entry(int argc, char **argv) {
 				float64 t = os_get_elapsed_seconds();
 				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
 				{
-					if (entity->entitytype == POWERUP_ENTITY)
+					if (entity->entitytype == POWERUP_ENTITY && !is_game_paused)
 					{
 						if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
 							entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(t + random_position_power_up), -100);
@@ -888,7 +956,7 @@ int entry(int argc, char **argv) {
 							int y = entity->grid_position.y;
 							if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
 								if (entity->drop_interval >= entity->drop_interval_timer) {
-									entity->drop_interval_timer += delta_t;
+									if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
 									
 									float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
 
@@ -910,7 +978,7 @@ int entry(int argc, char **argv) {
 							}
 						}
 						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
-							entity->wave_time -= delta_t;
+							if (!(is_game_paused)) entity->wave_time -= delta_t;
 
 							if (entity->wave_time < 0.0f) {
 								entity->wave_time = 0.0f;
@@ -935,11 +1003,6 @@ int entry(int argc, char **argv) {
 							Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 							draw_rect(draw_position, entity->size, entity->color);
 						}
-						if (entity->obstacle_type == HARD_OBSTACLE) {
-							if (get_random_float32_in_range(0, 1) <= 0.01) {
-								particle_emit(entity->position, v4(1, 1, 1, 0.8), HARD_OBSTACLE_PFX);
-							}
-						}
 					}
 					else
 					{
@@ -956,6 +1019,9 @@ int entry(int argc, char **argv) {
 			}
 		}
 
+		if (!(is_game_paused)) particle_update(delta_t);
+		particle_render();
+
 		int n_obstacles = 0;
 		if (debug_mode) {
 			for (int i = 0; i < obstacle_count; i++) {
@@ -966,15 +1032,15 @@ int entry(int argc, char **argv) {
 		}
 		
 		if (debug_mode) {
-			draw_text(font, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font, sprint(get_temporary_allocator(), STR("entities: %i (%i)"), latest_entites, n_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i (%i)"), latest_entites, n_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 				Entity* entity = &world->entities[i];
 				if (!entity->is_valid) continue;
 				if (!(entity->entitytype == PLAYER_ENTITY) && !(entity->obstacle_type == BLOCK_OBSTACLE)) {
-					draw_text(font, sprint(get_temporary_allocator(), STR("%i"), entity->health), font_height, v2_sub(entity->position, v2_mulf(entity->size, 0.5)), v2(0.2, 0.2), COLOR_GREEN);
+					draw_text(font_light, sprint(get_temporary_allocator(), STR("%i"), entity->health), font_height, v2_sub(entity->position, v2_mulf(entity->size, 0.5)), v2(0.2, 0.2), COLOR_GREEN);
 				}	
 			}
 		}
@@ -983,7 +1049,7 @@ int entry(int argc, char **argv) {
 		game_over = number_of_shots_missed >= number_of_hearts;
 
 		if (game_over) {
-			draw_text(font, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-PLAYABLE_WIDTH / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-PLAYABLE_WIDTH / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
 		}
 
 		int heart_size = 30;
@@ -1005,8 +1071,7 @@ int entry(int argc, char **argv) {
 		draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		
-		particle_update(delta_t);
-		particle_render();
+		draw_main_menu(font_light, font_bold);
 		os_update(); 
 		gfx_update();
 		seconds_counter += delta_t;
