@@ -253,15 +253,13 @@ void setup_player(Entity* entity) {
 	entity->color = COLOR_WHITE;
 }
 
-//Movement
-// Konstanter för rörelse
+
 const float MAX_SPEED = 500.0f;      // Max hastighet
 const float ACCELERATION = 2500.0f;  // Hur snabbt plattformen accelererar
 const float DECELERATION = 5000.0f;  // Hur snabbt plattformen bromsar in
 const float MIN_SPEED_THRESHOLD = 1.0f;  // Tröskel för när vi ska stoppa helt
-
 // Variabel för spelarens hastighet
-Vector2 velocity;
+
 
 void update_player_position(Entity* player, float delta_t) {
     Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
@@ -274,9 +272,9 @@ void update_player_position(Entity* player, float delta_t) {
         moving = true;
 
         // Om tidigare input var höger, decelerera först innan vi byter riktning
-        if (previous_input == 1 && velocity.x > 0) {
-            velocity.x -= DECELERATION * delta_t;
-            if (velocity.x < 0) velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
+        if (previous_input == 1 && player->velocity.x > 0) {
+            player->velocity.x -= DECELERATION * delta_t;
+            if (player->velocity.x < 0) player->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
             return;  // Vänta tills vi bromsat in helt
         }
         previous_input = 0;  // Uppdatera riktningen till vänster
@@ -288,9 +286,9 @@ void update_player_position(Entity* player, float delta_t) {
         moving = true;
 
         // Om tidigare input var vänster, decelerera först innan vi byter riktning
-        if (previous_input == 0 && velocity.x < 0) {
-            velocity.x += DECELERATION * delta_t;
-            if (velocity.x > 0) velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
+        if (previous_input == 0 && player->velocity.x < 0) {
+            player->velocity.x += DECELERATION * delta_t;
+            if (player->velocity.x > 0) player->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
             return;  // Vänta tills vi bromsat in helt
         }
         previous_input = 1;  // Uppdatera riktningen till höger
@@ -309,37 +307,36 @@ void update_player_position(Entity* player, float delta_t) {
     // Acceleration
     if (moving) {
         // Om vi rör oss, accelerera
-        velocity = v2_add(velocity, v2_mulf(input_axis, ACCELERATION * delta_t));
+        player->velocity = v2_add(player->velocity, v2_mulf(input_axis, ACCELERATION * delta_t));
 
         // Begränsa hastigheten till maxhastigheten
-        if (v2_length(velocity) > MAX_SPEED) {
-            velocity = v2_mulf(v2_normalize(velocity), MAX_SPEED);
+        if (v2_length(player->velocity) > MAX_SPEED) {
+            player->velocity = v2_mulf(v2_normalize(player->velocity), MAX_SPEED);
         }
     } else {
         // Deceleration om ingen knapp trycks ned
-        if (v2_length(velocity) > MIN_SPEED_THRESHOLD) {
-            Vector2 decel_vector = v2_mulf(v2_normalize(velocity), -DECELERATION * delta_t);
-            velocity = v2_add(velocity, decel_vector);
+        if (v2_length(player->velocity) > MIN_SPEED_THRESHOLD) {
+            Vector2 decel_vector = v2_mulf(v2_normalize(player->velocity), -DECELERATION * delta_t);
+            player->velocity = v2_add(player->velocity, decel_vector);
 
             // Om hastigheten närmar sig 0, stoppa helt
-            if (v2_length(velocity) < MIN_SPEED_THRESHOLD) {
-                velocity = v2(0, 0);
+            if (v2_length(player->velocity) < MIN_SPEED_THRESHOLD) {
+                player->velocity = v2(0, 0);
             }
         }
     }
+}
 
-    // Uppdatera spelarens position med aktuell hastighet
-    player->position = v2_add(player->position, v2_mulf(velocity, delta_t));
-
+void limit_player_position(Entity* player, float delta_t){
     // Begränsa spelarens position inom spelområdet
     if (player->position.x > PLAYABLE_WIDTH / 2 - player->size.x / 2) {
         player->position.x = PLAYABLE_WIDTH / 2 - player->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(velocity.x) > BOUNCE_THRESHOLD) {
-            velocity.x = -velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(player->velocity.x) > BOUNCE_THRESHOLD) {
+            player->velocity.x = -player->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
         } else {
-            velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            player->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 
@@ -347,10 +344,10 @@ void update_player_position(Entity* player, float delta_t) {
         player->position.x = -PLAYABLE_WIDTH / 2 + player->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(velocity.x) > BOUNCE_THRESHOLD) {
-            velocity.x = -velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(player->velocity.x) > BOUNCE_THRESHOLD) {
+            player->velocity.x = -player->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
         } else {
-            velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            player->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 }
@@ -919,7 +916,7 @@ int entry(int argc, char **argv) {
 			entity_counter++;
 
 			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
-
+			
 			if (entity->entitytype == PROJECTILE_ENTITY) 
 			{
 				bool collision = false;
@@ -1085,6 +1082,7 @@ int entry(int argc, char **argv) {
 					}
 					else
 					{
+						limit_player_position(entity, delta_t);
 						Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 						draw_rect(draw_position, entity->size, entity->color);
 					}
