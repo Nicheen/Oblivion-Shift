@@ -42,6 +42,15 @@ typedef enum PowerUpType {
 	MAX_POWER_UP,
 } PowerUpType;
 
+typedef enum DebuffType {
+	NIL_DEBUFF = 0,
+
+	SLOW_DOWN_DEBUFF = 1,
+	ADD_DECELERATION_DEBUFF = 2,
+
+	MAX_DEBUFF,
+} DebuffType;
+
 typedef enum EntityType {
 	NIL_ENTITY = 0,
 
