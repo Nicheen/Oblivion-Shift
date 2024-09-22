@@ -11,11 +11,12 @@
 // GLOBAL VARIABLES (!!!! WE USE #define and capital letters only !!!!)
 // -----------------------------------------------------------------------
 #define MAX_ENTITY_COUNT 1024
+#define MAX_DEBUFF_COUNT 20
+#define MAX_POWERUP_COUNT 20
+
 #define PLAYABLE_WIDTH 400
 #define GRID_WIDTH 13
 #define GRID_HEIGHT 13
-#define MAX_DEBUFF_COUNT 20
-// TODO: Bugg, flera entities förstörs när man skjuter en drop. Samt så förstörs [0, 0] av obstacles när en powerup tas upp.
 
 // TODO: try to remove the need for global variables
 int number_of_destroyed_obstacles = 0;
@@ -86,7 +87,7 @@ typedef struct Entity {
 } Entity;
 
 typedef struct Debuff{
-	enum DebuffType debufftype;
+	enum DebuffType debuff_type;
 } Debuff;
 
 typedef struct Player{
@@ -95,7 +96,7 @@ typedef struct Player{
 	float min_speed;
 	float max_bounce;
 	float damp_bounce;
-	Debuff player_debuffs[MAX_ENTITY_COUNT];
+	Debuff player_debuffs[MAX_DEBUFF_COUNT];
 } Player;
 
 typedef struct ObstacleTuple {
@@ -109,6 +110,7 @@ int obstacle_count = 0;
 typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+	Debuff world_debuffs[MAX_DEBUFF_COUNT];
 } World;
 World* world = 0;
 
@@ -717,66 +719,73 @@ void update_power_up_timer(Player* player, float delta_t) {
     }
 }
 
-bool draw_button(Gfx_Font* font_light, const char* text, Vector2 position) {
-    Vector2 size = v2(200, 50);  // Set button size
-    Vector2 mouse_pos = MOUSE_POSITION();  // Get current mouse position
+bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vector2 size, bool enabled) {
+	Vector4 color = v4(.45, .45, .45, 1);
+	
+	float L = pos.x;
+	float R = L + size.x;
+	float B = pos.y;
+	float T = B + size.y;
+	
+	float mx = input_frame.mouse_x - window.width/2;
+	float my = input_frame.mouse_y - window.height/2;
 
-    // Define button color and hover effect
-    Vector4 button_color = v4(0.2, 0.2, 0.8, 1); // Normal color
-    Vector4 hover_color = v4(0.5, 0.5, 1.0, 1); // Hover color
-    Vector4 current_color = button_color;
+	bool pressed = false;
 
-    // Check if mouse is over the button
-    if (mouse_pos.x >= position.x && mouse_pos.x <= position.x + size.x &&
-        mouse_pos.y >= position.y && mouse_pos.y <= position.y + size.y) {
-        current_color = hover_color;  // Change color on hover
+	if (mx >= L && mx < R && my >= B && my < T) {
+		color = v4(.15, .15, .15, 1);
+		if (is_key_down(MOUSE_BUTTON_LEFT)) {
+			color = v4(.05, .05, .05, 1);
+		}
+		
+		pressed = is_key_just_released(MOUSE_BUTTON_LEFT);
+	}
+	
+	if (enabled) {
+		color = v4_sub(color, v4(.2, .2, .2, 0));
+	}
 
-        // Check for click
-        if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
-            return true;  // Button was clicked
-        }
-    }
-
-    // Draw the button background
-    draw_rect(position, size, current_color);
-
-    // Approximate text size
-    int font_size = 24;  // Font size you're using
-    int text_length = strlen(text);  // Get the number of characters in the text
-    float average_char_width = font_size * 0.6f;  // Estimate average character width (0.6 is a rough multiplier)
-    float text_width = text_length * average_char_width;  // Calculate text width
-    float text_height = font_size;  // Set text height equal to the font size
-
-    // Calculate text position for centering
-    Vector2 text_position;
-    text_position.x = position.x + (size.x - text_width) / 2;  // Center horizontally
-    text_position.y = position.y + (size.y - text_height) / 2;  // Center vertically
-
-    // Draw the button label centered
-    draw_text(font_light, sprint(get_temporary_allocator(), STR(text)), font_size, text_position, v2(1, 1), COLOR_WHITE);  
-
-    return false;  // Button was not clicked
+	draw_rect(pos, size, color);
+	
+	Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
+	
+	Vector2 bottom_left = v2_sub(pos, m.functional_pos_min);
+	bottom_left.x += size.x/2;
+	bottom_left.x -= m.functional_size.x/2;
+	
+	bottom_left.y += size.y/2;
+	bottom_left.y -= m.functional_size.y/2;
+	
+	draw_text(font, label, font_height, bottom_left, v2(1, 1), COLOR_WHITE);
+	
+	return pressed;
 }
 
 void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_main_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
-		draw_text(font_bold, sprint(get_temporary_allocator(), STR("Main Menu")), 48, v2(-75, 75), v2(1, 1), COLOR_WHITE);
+		
+		string label = STR("Main Menu");
+		u32 font_height = 48;
+		float button_size = 200;
+		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
 
+		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
+		
 		// Play Option
-		if (draw_button(font_light, "Play", v2(-100, 0))) {
+		if (draw_button(font_light, font_height, STR("Play"), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
 			is_main_menu_active = false;  // Close menu
         	is_game_paused = false;       // Resume game
 		}
 
 		// Settings Option
-		if (draw_button(font_light, "Settings", v2(-100, -50))) {
+		if (draw_button(font_light, font_height, STR("Settings"), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
 			is_settings_menu_active = true;   // Open settings menu
 			is_main_menu_active = false;      // Close main menu
 		}
 
 		// Quit Option
-		if (draw_button(font_light, "Quit", v2(-100, -100))) {
+		if (draw_button(font_light, font_height, STR("Quit"), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
 			window.should_close = true;  // Quit game
 		}
 	}
@@ -786,25 +795,33 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_settings_menu_active) {
 		// Draw a semi-transparent background
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
-		draw_text(font_bold, sprint(get_temporary_allocator(), STR("Settings")), 48, v2(-75, 75), v2(1, 1), COLOR_WHITE);
+
+		string label = STR("Settings");
+		u32 font_height = 48;
+		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+
+		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
+
+		Vector2 button_size = v2(200, font_height);
+		int y = 0;
 
 		// Sound Settings Option
-		if (draw_button(font_light, "Sound", v2(-100, 0))) {
+		if (draw_button(font_light, font_height, STR("Sound"), v2(-button_size.x / 2, y), button_size, true)) {
 			// Toggle sound settings (not implemented)
 		}
-
+		y -= button_size.y;
 		// Graphics Settings Option
-		if (draw_button(font_light, "Graphics", v2(-100, -50))) {
+		if (draw_button(font_light, font_height, STR("Graphics"), v2(-button_size.x / 2, y), button_size, true)) {
 			// Open graphics settings (not implemented)
 		}
-
+		y -= button_size.y;
 		// Controls Settings Option
-		if (draw_button(font_light, "Controls", v2(-100, -100))) {
+		if (draw_button(font_light, font_height, STR("Controls"), v2(-button_size.x / 2, y), button_size, true)) {
 			// Open controls settings (not implemented)
 		}
-
+		y -= button_size.y;
 		// Back Button to return to Main Menu
-		if (draw_button(font_light, "Back", v2(-100, -150))) {
+		if (draw_button(font_light, font_height, STR("Back"), v2(-button_size.x / 2, y), button_size, true)) {
 			is_settings_menu_active = false;  // Close settings menu
 			is_main_menu_active = true;       // Return to main menu
 		}
@@ -1119,11 +1136,10 @@ int entry(int argc, char **argv) {
 					}
 					
 					
-					
+	
 					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
 					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), v4(0, 1, 0, 0.5)); }
-				}
-				
+				}	
 			}
 		}
 
