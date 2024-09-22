@@ -9,7 +9,19 @@
 			"algorithm": "c",
 			"initializer_list": "c",
 			"utility": "c",
-			"xutility": "c"
+			"xutility": "c",
+			"cmath": "c",
+			"compare": "c",
+			"concepts": "c",
+			"cstddef": "c",
+			"cstdint": "c",
+			"cstdio": "c",
+			"cstdlib": "c",
+			"cstring": "c",
+			"cwchar": "c",
+			"limits": "c",
+			"type_traits": "c",
+			"xtr1common": "c"
 		}
 	}
 }

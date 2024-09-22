@@ -26,13 +26,15 @@ int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
 float projectile_speed = 500;
 int number_of_hearts = 3;
+int current_stage_level = 0;
 float timer_power_up = 0;
 bool mercy_bottom;
 bool mercy_top;
-bool debug_mode = true;
+bool debug_mode = false;
 bool game_over = false;
 bool is_power_up_active = false;
 bool is_main_menu_active = false;
+bool is_settings_menu_active = false;
 bool is_game_paused = false;
 Vector2 mouse_position;
 float64 delta_t;
@@ -704,8 +706,9 @@ bool draw_button(Gfx_Font* font_light, const char* text, Vector2 position) {
     draw_rect(position, size, current_color);
 
     // Approximate text size
+    int font_size = 24;  // Font size you're using
     int text_length = strlen(text);  // Get the number of characters in the text
-    float average_char_width = font_size * 1.0f;  // Estimate average character width (0.6 is a rough multiplier)
+    float average_char_width = font_size * 0.6f;  // Estimate average character width (0.6 is a rough multiplier)
     float text_width = text_length * average_char_width;  // Calculate text width
     float text_height = font_size;  // Set text height equal to the font size
 
@@ -734,14 +737,59 @@ void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 
 		// Settings Option
 		if (draw_button(font_light, "Settings", v2(-100, -50))) {
-			// Open settings screen (not implemented)
+			is_settings_menu_active = true;   // Open settings menu
+			is_main_menu_active = false;      // Close main menu
 		}
 
 		// Quit Option
 		if (draw_button(font_light, "Quit", v2(-100, -100))) {
-			number_of_destroyed_obstacles = 0;
-			number_of_shots_fired = 0;
-			number_of_shots_missed = 0;
+			window.should_close = true;  // Quit game
+		}
+	}
+}
+
+void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
+	if (is_settings_menu_active) {
+		// Draw a semi-transparent background
+		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		draw_text(font_bold, sprint(get_temporary_allocator(), STR("Settings")), 48, v2(-75, 75), v2(1, 1), COLOR_WHITE);
+
+		// Sound Settings Option
+		if (draw_button(font_light, "Sound", v2(-100, 0))) {
+			// Toggle sound settings (not implemented)
+		}
+
+		// Graphics Settings Option
+		if (draw_button(font_light, "Graphics", v2(-100, -50))) {
+			// Open graphics settings (not implemented)
+		}
+
+		// Controls Settings Option
+		if (draw_button(font_light, "Controls", v2(-100, -100))) {
+			// Open controls settings (not implemented)
+		}
+
+		// Back Button to return to Main Menu
+		if (draw_button(font_light, "Back", v2(-100, -150))) {
+			is_settings_menu_active = false;  // Close settings menu
+			is_main_menu_active = true;       // Return to main menu
+		}
+	}
+}
+
+void setup_world(float spawn_rate) {
+	if (obstacle_count > 0) {
+		for (int i = 0; i < obstacle_count; i++) {
+			entity_destroy(world->obstacle_list[i].obstacle);  // Nullify all the obstacles
+		}
+	}
+	
+	for (int x = 0; x < GRID_WIDTH; x++) { // x
+		for (int y = 0; y < GRID_HEIGHT; y++) { // y
+			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
+				Entity* entity = entity_create();
+				setup_obstacle(entity, x, y);
+			}
 		}
 	}
 }
@@ -780,14 +828,7 @@ int entry(int argc, char **argv) {
 	Entity* player = entity_create();
 	setup_player(player);
 
-	for (int x = 0; x < GRID_WIDTH; x++) { // x
-		for (int y = 0; y < GRID_HEIGHT; y++) { // y
-			if (get_random_float64_in_range(0, 1) <= SPAWN_RATE_ALL_OBSTACLES) {
-				Entity* entity = entity_create();
-				setup_obstacle(entity, x, y);
-			}
-		}
-	}
+	setup_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	// --------------------------------
 	float random_position_power_up = get_random_int_in_range(-10, 10);
@@ -811,8 +852,20 @@ int entry(int argc, char **argv) {
 
 		if (is_key_just_pressed(KEY_ESCAPE)) {
 			consume_key_just_pressed(KEY_ESCAPE);
-			is_main_menu_active = !is_main_menu_active; // Toggle menu on/off
-			is_game_paused = is_main_menu_active;       // Pause game when menu is up
+
+			if (is_settings_menu_active) {
+				// Go back to main menu from settings
+				is_settings_menu_active = false;
+				is_main_menu_active = true;
+			} else if (is_main_menu_active) {
+				// If in the main menu, pressing ESC resumes the game
+				is_main_menu_active = false;
+				is_game_paused = false;
+			} else {
+				// If in the game, pressing ESC opens the main menu and pauses the game
+				is_main_menu_active = true;
+				is_game_paused = true;
+			}
 		}
 
 		if (player->is_valid && !game_over && !is_game_paused)
@@ -828,10 +881,10 @@ int entry(int argc, char **argv) {
 				number_of_shots_fired++;
 			}
 
-			if (number_of_destroyed_obstacles % 5 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
-				Entity* power_up = entity_create();
-				setup_power_up(power_up);
-			}
+			//if (number_of_destroyed_obstacles % 5 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
+			//	Entity* power_up = entity_create();
+			//	setup_power_up(power_up);
+			//}
 			
 			update_player_position(player, delta_t);
 		}
@@ -839,9 +892,11 @@ int entry(int argc, char **argv) {
 		// Uppdatera timern för power-up
         update_power_up_timer(player, delta_t);
 
+		draw_text(font_bold, sprint(get_temporary_allocator(), STR("%i"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
+
 		// Entity Loop for drawing and everything else
 		int entity_counter = 0;
-		for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
+		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 			Entity* entity = &world->entities[i];
 			if (!entity->is_valid) continue;
 			entity_counter++;
@@ -912,7 +967,8 @@ int entry(int argc, char **argv) {
 			}
 			
 			{ // Draw The Entity
-				float64 t = os_get_elapsed_seconds();
+				float64 t = os_get_elapsed_seconds(); 
+				// TODO: Timer keeps on going after game is paused
 				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
 				{
 					if (entity->entitytype == POWERUP_ENTITY && !is_game_paused)
@@ -1023,12 +1079,16 @@ int entry(int argc, char **argv) {
 		particle_render();
 
 		int n_obstacles = 0;
-		if (debug_mode) {
-			for (int i = 0; i < obstacle_count; i++) {
-				if (world->obstacle_list[i].obstacle != NULL && world->obstacle_list[i].obstacle->obstacle_type != NIL_OBSTACLE) {
-					n_obstacles++;
-				}
+		for (int i = 0; i < obstacle_count; i++) {
+			if (world->obstacle_list[i].obstacle != NULL && world->obstacle_list[i].obstacle->obstacle_type != NIL_OBSTACLE) {
+				if (world->obstacle_list[i].obstacle->obstacle_type != BLOCK_OBSTACLE) n_obstacles++;
 			}
+		}
+		
+		if (n_obstacles == 0) {
+			current_stage_level++;
+			float spawn_rate_increase = pow(2, current_stage_level);
+			setup_world((spawn_rate_increase/100) + SPAWN_RATE_ALL_OBSTACLES);
 		}
 		
 		if (debug_mode) {
@@ -1049,7 +1109,10 @@ int entry(int argc, char **argv) {
 		game_over = number_of_shots_missed >= number_of_hearts;
 
 		if (game_over) {
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER"), number_of_shots_missed), font_height, v2(-PLAYABLE_WIDTH / 2, 0), v2(1.5, 1.5), COLOR_GREEN);
+			current_stage_level = 0;
+			number_of_shots_missed = 0;
+			setup_world(SPAWN_RATE_ALL_OBSTACLES);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 		}
 
 		int heart_size = 30;
@@ -1071,6 +1134,7 @@ int entry(int argc, char **argv) {
 		draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		
+		draw_settings_menu(font_light, font_bold);
 		draw_main_menu(font_light, font_bold);
 		os_update(); 
 		gfx_update();
