@@ -66,6 +66,8 @@ typedef struct Entity {
 	Vector2 size;
 	Vector2 position;
 	Vector2 velocity;
+	Vector2 acceleration;
+	Vector2 deceleration;
 	Vector4 color;
 	int health;
 	bool is_valid;
@@ -84,6 +86,12 @@ typedef struct Entity {
 	enum PowerUpType power_up_type;
 	enum PowerUpSpawn power_up_spawn;
 } Entity;
+
+typedef struct Player{
+	Entity* player;
+	float max_speed;
+	float min_speed;
+}
 
 typedef struct ObstacleTuple {
 	Entity* obstacle;
@@ -129,6 +137,8 @@ int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int
     // If we made it through the loop, all tiles below are clear
     return 1;
 }
+
+
 
 Entity* entity_create() {
 	Entity* entity_found = 0;
@@ -245,19 +255,19 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 	}
 }
 
-void setup_player(Entity* entity) {
-	entity->entitytype = PLAYER_ENTITY;
-
-	entity->size = v2(50, 20);
-	entity->position = v2(0, -300);
-	entity->color = COLOR_WHITE;
+void setup_player(Player* player) {
+	player->entity->entitytype = PLAYER_ENTITY;
+	player->
+	player->entity->size = v2(50, 20);
+	player->entity->position = v2(0, -300);
+	player->entity->color = COLOR_WHITE;
 }
 
 
-const float MAX_SPEED = 500.0f;      // Max hastighet
+const float player->max_speed = 500.0f;      // Max hastighet
 const float ACCELERATION = 2500.0f;  // Hur snabbt plattformen accelererar
 const float DECELERATION = 5000.0f;  // Hur snabbt plattformen bromsar in
-const float MIN_SPEED_THRESHOLD = 1.0f;  // Tröskel för när vi ska stoppa helt
+const float player->min_speed = 1.0f;  // Tröskel för när vi ska stoppa helt
 // Variabel för spelarens hastighet
 
 
@@ -310,17 +320,17 @@ void update_player_position(Entity* player, float delta_t) {
         player->velocity = v2_add(player->velocity, v2_mulf(input_axis, ACCELERATION * delta_t));
 
         // Begränsa hastigheten till maxhastigheten
-        if (v2_length(player->velocity) > MAX_SPEED) {
-            player->velocity = v2_mulf(v2_normalize(player->velocity), MAX_SPEED);
+        if (v2_length(player->velocity) > player->max_speed) {
+            player->velocity = v2_mulf(v2_normalize(player->velocity), player->max_speed);
         }
     } else {
         // Deceleration om ingen knapp trycks ned
-        if (v2_length(player->velocity) > MIN_SPEED_THRESHOLD) {
+        if (v2_length(player->velocity) > player->min_speed) {
             Vector2 decel_vector = v2_mulf(v2_normalize(player->velocity), -DECELERATION * delta_t);
             player->velocity = v2_add(player->velocity, decel_vector);
 
             // Om hastigheten närmar sig 0, stoppa helt
-            if (v2_length(player->velocity) < MIN_SPEED_THRESHOLD) {
+            if (v2_length(player->velocity) < player->min_speed) {
                 player->velocity = v2(0, 0);
             }
         }
