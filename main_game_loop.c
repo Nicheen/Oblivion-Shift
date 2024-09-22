@@ -87,10 +87,15 @@ typedef struct Entity {
 	enum PowerUpSpawn power_up_spawn;
 } Entity;
 
+typedef struct Debuff{
+	enum DebffType debufftype;
+} Debuff;
+
 typedef struct Player{
 	Entity* player;
 	float max_speed;
 	float min_speed;
+	Debuff player_debuff[MAX_ENTITY_COUNT];
 }
 
 typedef struct ObstacleTuple {
