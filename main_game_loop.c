@@ -88,10 +88,10 @@ typedef struct Entity {
 } Entity;
 
 typedef struct Player{
-	Entity* player;
+	Entity* entity;
 	float max_speed;
 	float min_speed;
-}
+} Player;
 
 typedef struct ObstacleTuple {
 	Entity* obstacle;
@@ -255,50 +255,67 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 	}
 }
 
-void setup_player(Player* player) {
-	player->entity->entitytype = PLAYER_ENTITY;
-	player->
-	player->entity->size = v2(50, 20);
-	player->entity->position = v2(0, -300);
-	player->entity->color = COLOR_WHITE;
+Entity* setup_player_entity(Entity* entity) {
+	entity->entitytype = PLAYER_ENTITY;
+
+	entity->size = v2(50, 20);
+	entity->position = v2(0, -300);
+	entity->color = COLOR_WHITE;
+
+	return entity;
 }
 
+// Initialize the player
+Player* create_player() {
+    // Allocate memory for the Player object
+	Player* player = 0;
+	player = alloc(get_heap_allocator(), sizeof(Player));
+	memset(player, 0, sizeof(Player));
 
-const float player->max_speed = 500.0f;      // Max hastighet
-const float ACCELERATION = 2500.0f;  // Hur snabbt plattformen accelererar
-const float DECELERATION = 5000.0f;  // Hur snabbt plattformen bromsar in
-const float player->min_speed = 1.0f;  // Tröskel för när vi ska stoppa helt
-// Variabel för spelarens hastighet
+    // Initialize the Entity part of the Player
+    player->entity = entity_create();
+    
+    // Set up the player's entity attributes
+    player->entity = setup_player_entity(player->entity);  // Assuming setup_player handles the initial setup of the Entity
+    
+    // Additional player-specific attributes
+    player->max_speed = 500.0f;  // Example max speed
+    player->min_speed = 1.0f;   // Example min speed
 
+	player->entity->acceleration = v2(2500.0f, 0.0f);
+	player->entity->deceleration = v2(5000.0f, 0.0f);
+    
+    return player;
+}
 
-void update_player_position(Entity* player, float delta_t) {
+void update_player_position(Player* player, float delta_t) {
     Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
     bool moving = false;
     static int previous_input = -1;  // -1: ingen riktning, 0: vänster, 1: höger
 
     // Kontrollera om vänster knapp trycks ned
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->position.x > -PLAYABLE_WIDTH / 2 + player->size.x / 2) {
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
         input_axis.x -= 1.0f;
         moving = true;
 
         // Om tidigare input var höger, decelerera först innan vi byter riktning
-        if (previous_input == 1 && player->velocity.x > 0) {
-            player->velocity.x -= DECELERATION * delta_t;
-            if (player->velocity.x < 0) player->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
+        if (previous_input == 1 && player->entity->velocity.x > 0) {
+            player->entity->velocity.x -= player->entity->deceleration.x * delta_t;
+            if (player->entity->velocity.x < 0) player->entity->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
             return;  // Vänta tills vi bromsat in helt
         }
         previous_input = 0;  // Uppdatera riktningen till vänster
     }
 
     // Kontrollera om höger knapp trycks ned
-    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->position.x < PLAYABLE_WIDTH / 2 - player->size.x / 2) {
+    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
         input_axis.x += 1.0f;
         moving = true;
 
         // Om tidigare input var vänster, decelerera först innan vi byter riktning
-        if (previous_input == 0 && player->velocity.x < 0) {
-            player->velocity.x += DECELERATION * delta_t;
-            if (player->velocity.x > 0) player->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
+        if (previous_input == 0 && player->entity->velocity.x < 0) {
+            player->entity->velocity.x += player->entity->deceleration.x * delta_t;
+            if (player->entity->velocity.x > 0) player->entity->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
             return;  // Vänta tills vi bromsat in helt
         }
         previous_input = 1;  // Uppdatera riktningen till höger
@@ -317,47 +334,47 @@ void update_player_position(Entity* player, float delta_t) {
     // Acceleration
     if (moving) {
         // Om vi rör oss, accelerera
-        player->velocity = v2_add(player->velocity, v2_mulf(input_axis, ACCELERATION * delta_t));
+        player->entity->velocity = v2_add(player->entity->velocity, v2_mulf(input_axis, player->entity->acceleration.x * delta_t));
 
         // Begränsa hastigheten till maxhastigheten
-        if (v2_length(player->velocity) > player->max_speed) {
-            player->velocity = v2_mulf(v2_normalize(player->velocity), player->max_speed);
+        if (v2_length(player->entity->velocity) > player->max_speed) {
+            player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed);
         }
     } else {
         // Deceleration om ingen knapp trycks ned
-        if (v2_length(player->velocity) > player->min_speed) {
-            Vector2 decel_vector = v2_mulf(v2_normalize(player->velocity), -DECELERATION * delta_t);
-            player->velocity = v2_add(player->velocity, decel_vector);
+        if (v2_length(player->entity->velocity) > player->min_speed) {
+            Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
+            player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
 
             // Om hastigheten närmar sig 0, stoppa helt
-            if (v2_length(player->velocity) < player->min_speed) {
-                player->velocity = v2(0, 0);
+            if (v2_length(player->entity->velocity) < player->min_speed) {
+                player->entity->velocity = v2(0, 0);
             }
         }
     }
 }
 
-void limit_player_position(Entity* player, float delta_t){
+void limit_player_position(Entity* entity, float delta_t){
     // Begränsa spelarens position inom spelområdet
-    if (player->position.x > PLAYABLE_WIDTH / 2 - player->size.x / 2) {
-        player->position.x = PLAYABLE_WIDTH / 2 - player->size.x / 2;
+    if (entity->position.x > PLAYABLE_WIDTH / 2 - entity->size.x / 2) {
+        entity->position.x = PLAYABLE_WIDTH / 2 - entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(player->velocity.x) > BOUNCE_THRESHOLD) {
-            player->velocity.x = -player->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(entity->velocity.x) > BOUNCE_THRESHOLD) {
+            entity->velocity.x = -entity->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
         } else {
-            player->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 
-    if (player->position.x < -PLAYABLE_WIDTH / 2 + player->size.x / 2) {
-        player->position.x = -PLAYABLE_WIDTH / 2 + player->size.x / 2;
+    if (entity->position.x < -PLAYABLE_WIDTH / 2 + entity->size.x / 2) {
+        entity->position.x = -PLAYABLE_WIDTH / 2 + entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(player->velocity.x) > BOUNCE_THRESHOLD) {
-            player->velocity.x = -player->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(entity->velocity.x) > BOUNCE_THRESHOLD) {
+            entity->velocity.x = -entity->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
         } else {
-            player->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 }
@@ -382,15 +399,15 @@ void play_random_blop_sound() {
     }
 }
 
-void summon_projectile_player(Entity* entity, Entity* player) {
+void summon_projectile_player(Entity* entity, Player* player) {
 	entity->entitytype = PROJECTILE_ENTITY;
 
 	int setup_y_offset = 20;
 	entity->size = v2(10, 10);
 	entity->health = 1;
-	entity->position = v2_add(player->position, v2(0, setup_y_offset));
+	entity->position = v2_add(player->entity->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
-	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->position.x, player->position.y + setup_y_offset)));
+	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->entity->position.x, player->entity->position.y + setup_y_offset)));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
 }
 
@@ -637,7 +654,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	}
 }
 
-void apply_power_up(Entity* power_up, Entity* player) {
+void apply_power_up(Entity* power_up, Player* player) {
 	switch(power_up->power_up_type) 
 	{
 		case(IMMORTAL_BOTTOM_POWER_UP): {
@@ -653,7 +670,7 @@ void apply_power_up(Entity* power_up, Entity* player) {
 		} break;
 
 		case(EXPAND_POWER_UP): {
-			player->size = v2_add(player->size, v2(30, 0));
+			player->entity->size = v2_add(player->entity->size, v2(30, 0));
 			is_power_up_active = true;
 			timer_power_up = 5.0f;
 		} break;
@@ -675,7 +692,7 @@ void apply_power_up(Entity* power_up, Entity* player) {
 // TODO: Det här kommer inte funka. Varje powerup behöver en egen timer. Här delar
 // alla powerups samma timer, så om du hinner få en powerup innan timern börjar om
 // så tappar du inte din powerup!
-void update_power_up_timer(Entity* player, float delta_t) {
+void update_power_up_timer(Player* player, float delta_t) {
     // Kontrollera om power-upen är aktiv
     if (is_power_up_active) {
         timer_power_up -= delta_t;
@@ -689,7 +706,7 @@ void update_power_up_timer(Entity* player, float delta_t) {
             is_power_up_active = false;  
         }
 		if (timer_power_up <= 0 && EXPAND_POWER_UP) {
-            player->size = v2_sub(player->size, v2(10, 0));
+            player->entity->size = v2_sub(player->entity->size, v2(10, 0));
             is_power_up_active = false; 
 		}
     }
@@ -848,10 +865,9 @@ int entry(int argc, char **argv) {
 	Gfx_Image* heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
 	assert(heart_sprite, "Failed loading 'res/textures/heart.png'");
 	
-	// Here we create the player entity object
-	Entity* player = entity_create();
-	setup_player(player);
-
+	// Here we create the player object
+	Player* player = create_player();
+	
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	// --------------------------------
@@ -892,7 +908,7 @@ int entry(int argc, char **argv) {
 			}
 		}
 
-		if (player->is_valid && !game_over && !is_game_paused)
+		if (player->entity->is_valid && !game_over && !is_game_paused)
 		{
 			// Hantera vänsterklick
 			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
@@ -1152,7 +1168,7 @@ int entry(int argc, char **argv) {
 
 		if (debug_mode) 
 		{
-			draw_line(player->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
+			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 		}
 
 		float wave = 15*(sin(now) + 1);
