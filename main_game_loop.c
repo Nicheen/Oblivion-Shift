@@ -24,6 +24,7 @@ int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 int number_of_power_ups = 0;
+int number_of_block_obstacles = 0;
 float projectile_speed = 500;
 int number_of_hearts = 3;
 int current_stage_level = 0;
@@ -374,7 +375,6 @@ void play_random_blop_sound() {
     }
 }
 
-
 void summon_projectile_player(Entity* entity, Entity* player) {
 	entity->entitytype = PROJECTILE_ENTITY;
 
@@ -476,6 +476,8 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->obstacle_type = BLOCK_OBSTACLE;
 		entity->health = 9999;
 		entity->size = v2(30, 30);
+
+		number_of_block_obstacles++;
 	} 
 	// If none of the above, spawn the Base Obstacle (remaining 50%)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE + SPAWN_RATE_POWERUP_OBSTACLE)
@@ -566,9 +568,12 @@ void apply_damage(Entity* entity, float damage) {
 			int y = position.y;
 
 			// Find the corresponding tuple in world->obstacle_list and nullify the obstacle
-			for (int i = 0; i < obstacle_count; i++) {
+			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				if (world->obstacle_list[i].x == x && world->obstacle_list[i].y == y) {
 					entity_destroy(world->obstacle_list[i].obstacle);  // Nullify the obstacle
+					world->obstacle_list[i].x = 0;
+					world->obstacle_list[i].y = 0;
+					obstacle_count--;
 					break;
 				}
 			}
@@ -607,6 +612,7 @@ bool circle_circle_collision(Entity* circle1, Entity* circle2) {
     // Compare squared distance to squared radii sum (to avoid unnecessary sqrt calculation)
     return dist_squared <= radius_sum * radius_sum;
 }
+
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
@@ -723,7 +729,6 @@ bool draw_button(Gfx_Font* font_light, const char* text, Vector2 position) {
     return false;  // Button was not clicked
 }
 
-
 void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_main_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
@@ -777,13 +782,25 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	}
 }
 
-void setup_world(float spawn_rate) {
-	if (obstacle_count > 0) {
-		for (int i = 0; i < obstacle_count; i++) {
-			entity_destroy(world->obstacle_list[i].obstacle);  // Nullify all the obstacles
+void clean_world() {
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
+			entity_destroy(entity);
 		}
 	}
-	
+	// Iterate over the obstacle list and destroy each obstacle
+    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+        if (world->obstacle_list[i].obstacle != NULL) {
+            entity_destroy(world->obstacle_list[i].obstacle);  // Destroy the obstacle
+            world->obstacle_list[i].obstacle = NULL;           // Nullify the reference
+        }
+    }
+	obstacle_count = 0;
+	number_of_block_obstacles = 0;
+}
+
+void summon_world(float spawn_rate) {
 	for (int x = 0; x < GRID_WIDTH; x++) { // x
 		for (int y = 0; y < GRID_HEIGHT; y++) { // y
 			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
@@ -828,7 +845,7 @@ int entry(int argc, char **argv) {
 	Entity* player = entity_create();
 	setup_player(player);
 
-	setup_world(SPAWN_RATE_ALL_OBSTACLES);
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	// --------------------------------
 	float random_position_power_up = get_random_int_in_range(-10, 10);
@@ -912,7 +929,13 @@ int entry(int argc, char **argv) {
 					if (entity == other_entity) continue;
 					if (collision) break;
 					switch(other_entity->entitytype) {
-						case(PLAYER_ENTITY):
+						case(PLAYER_ENTITY): {
+							if (circle_rect_collision(entity, other_entity)) 
+							{
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							} 
+						} break;
 						case(OBSTACLE_ENTITY): {
 							if (circle_rect_collision(entity, other_entity)) 
 							{
@@ -1077,25 +1100,20 @@ int entry(int argc, char **argv) {
 
 		if (!(is_game_paused)) particle_update(delta_t);
 		particle_render();
-
-		int n_obstacles = 0;
-		for (int i = 0; i < obstacle_count; i++) {
-			if (world->obstacle_list[i].obstacle != NULL && world->obstacle_list[i].obstacle->obstacle_type != NIL_OBSTACLE) {
-				if (world->obstacle_list[i].obstacle->obstacle_type != BLOCK_OBSTACLE) n_obstacles++;
-			}
-		}
 		
-		if (n_obstacles == 0) {
+		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
+			clean_world();
 			float spawn_rate_increase = pow(2, current_stage_level);
-			setup_world((spawn_rate_increase/100) + SPAWN_RATE_ALL_OBSTACLES);
+			summon_world((spawn_rate_increase/100) + SPAWN_RATE_ALL_OBSTACLES);
 		}
 		
 		if (debug_mode) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i (%i)"), latest_entites, n_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 				Entity* entity = &world->entities[i];
 				if (!entity->is_valid) continue;
@@ -1111,7 +1129,8 @@ int entry(int argc, char **argv) {
 		if (game_over) {
 			current_stage_level = 0;
 			number_of_shots_missed = 0;
-			setup_world(SPAWN_RATE_ALL_OBSTACLES);
+			clean_world();
+			summon_world(SPAWN_RATE_ALL_OBSTACLES);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 		}
 
