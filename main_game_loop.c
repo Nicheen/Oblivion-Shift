@@ -14,8 +14,6 @@
 #define PLAYABLE_WIDTH 400
 #define GRID_WIDTH 13
 #define GRID_HEIGHT 13
-#define BOUNCE_THRESHOLD 200.0f  // Hastighet som krävs för att studsa
-#define BOUNCE_DAMPING 0.5f  // Dämpning av hastigheten efter studsen
 #define MAX_DEBUFF_COUNT 20
 // TODO: Bugg, flera entities förstörs när man skjuter en drop. Samt så förstörs [0, 0] av obstacles när en powerup tas upp.
 
@@ -88,13 +86,15 @@ typedef struct Entity {
 } Entity;
 
 typedef struct Debuff{
-	enum DebffType debufftype;
+	enum DebuffType debufftype;
 } Debuff;
 
 typedef struct Player{
 	Entity* entity;
 	float max_speed;
 	float min_speed;
+	float max_bounce;
+	float damp_bounce;
 	Debuff player_debuffs[MAX_ENTITY_COUNT];
 } Player;
 
@@ -113,10 +113,10 @@ typedef struct World {
 World* world = 0;
 
 // Function to check clearance below a tile
-int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
+bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
     // Ensure the y+1 is within the matrix bounds
     if (y == 0) {
-        return 1; 
+        return true; 
     }
 
     // Iterate through all rows below (x, y), i.e., (x, y-1) down to (x, 0)
@@ -130,7 +130,7 @@ int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int
                 
                 // If the obstacle is not clear (i.e., not NULL), return 0
                 if (obstacle_list[j].obstacle != NULL && obstacle_list[j].obstacle->obstacle_type != NIL_OBSTACLE) {
-                    return 0;  // If the obstacle is not destroyed, return 0
+                    return false;  // If the obstacle is not destroyed, return 0
                 }
                 break;  // Break the inner loop once we've found the tile
             }
@@ -140,10 +140,8 @@ int check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int
     }
 
     // If we made it through the loop, all tiles below are clear
-    return 1;
+    return true;
 }
-
-
 
 Entity* entity_create() {
 	Entity* entity_found = 0;
@@ -286,6 +284,8 @@ Player* create_player() {
     // Additional player-specific attributes
     player->max_speed = 500.0f;  // Example max speed
     player->min_speed = 1.0f;   // Example min speed
+	player->max_bounce = 200.0f;
+	player->damp_bounce = 0.5;
 
 	player->entity->acceleration = v2(2500.0f, 0.0f);
 	player->entity->deceleration = v2(5000.0f, 0.0f);
@@ -359,27 +359,27 @@ void update_player_position(Player* player, float delta_t) {
     }
 }
 
-void limit_player_position(Entity* entity, float delta_t){
+void limit_player_position(Player* player, float delta_t){
     // Begränsa spelarens position inom spelområdet
-    if (entity->position.x > PLAYABLE_WIDTH / 2 - entity->size.x / 2) {
-        entity->position.x = PLAYABLE_WIDTH / 2 - entity->size.x / 2;
+    if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
+        player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(entity->velocity.x) > BOUNCE_THRESHOLD) {
-            entity->velocity.x = -entity->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(player->entity->velocity.x) > player->max_bounce) {
+            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
         } else {
-            entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 
-    if (entity->position.x < -PLAYABLE_WIDTH / 2 + entity->size.x / 2) {
-        entity->position.x = -PLAYABLE_WIDTH / 2 + entity->size.x / 2;
+    if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
+        player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(entity->velocity.x) > BOUNCE_THRESHOLD) {
-            entity->velocity.x = -entity->velocity.x * BOUNCE_DAMPING;  // Reflektera och dämpa hastigheten
+        if (fabs(player->entity->velocity.x) > player->max_bounce) {
+            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
         } else {
-            entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
         }
     }
 }
@@ -1113,7 +1113,7 @@ int entry(int argc, char **argv) {
 					}
 					else
 					{
-						limit_player_position(entity, delta_t);
+						limit_player_position(player, delta_t);
 						Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
 						draw_rect(draw_position, entity->size, entity->color);
 					}
