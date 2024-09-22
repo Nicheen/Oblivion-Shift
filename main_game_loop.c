@@ -39,6 +39,7 @@ bool is_game_paused = false;
 Vector2 mouse_position;
 float64 delta_t;
 
+#define m4_identity m4_make_scale(v3(1, 1, 1))
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
 
 Vector2 MOUSE_POSITION() {
@@ -394,7 +395,7 @@ void play_random_blop_sound() {
 
     switch (random_sound) {
         case 0:
-            play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
+			play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
             break;
         case 1:
             play_one_audio_clip(STR("res/sound_effects/blop2.wav"));
@@ -540,6 +541,7 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
 	if (projectile->n_bounces >= projectile->max_bounces) {
 		entity_destroy(projectile);
+		return;
 	}
 	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
 
@@ -547,7 +549,7 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
 	{
 		projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t));
-		projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
+		projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis0
 	} 
 	else 
 	{
@@ -560,9 +562,11 @@ void projectile_bounce_world(Entity* projectile) {
 	projectile->n_bounces++;
 	if (projectile->n_bounces >= projectile->max_bounces) {
 		entity_destroy(projectile);
+		return;
 	}
 	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
-	play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
+	
+	projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t)); // go back 
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
 }
 
@@ -728,52 +732,60 @@ void update_power_up_timer(Player* player, float delta_t) {
 }
 
 bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vector2 size, bool enabled) {
-	Vector4 color = v4(.45, .45, .45, 1);
-	
-	float L = pos.x;
-	float R = L + size.x;
-	float B = pos.y;
-	float T = B + size.y;
-	
-	float mx = input_frame.mouse_x - window.width/2;
-	float my = input_frame.mouse_y - window.height/2;
+    if (font == NULL) {
+        return false; // Early return if invalid inputs
+    }
 
-	bool pressed = false;
+    Vector4 color = v4(.45, .45, .45, 1);
 
-	if (mx >= L && mx < R && my >= B && my < T) {
-		color = v4(.15, .15, .15, 1);
-		if (is_key_down(MOUSE_BUTTON_LEFT)) {
-			color = v4(.05, .05, .05, 1);
-		}
-		
-		pressed = is_key_just_released(MOUSE_BUTTON_LEFT);
-	}
-	
-	if (enabled) {
-		color = v4_sub(color, v4(.2, .2, .2, 0));
-	}
+    float L = pos.x;
+    float R = L + size.x;
+    float B = pos.y;
+    float T = B + size.y;
 
-	draw_rect(pos, size, color);
-	
-	Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
-	
-	Vector2 bottom_left = v2_sub(pos, m.functional_pos_min);
-	bottom_left.x += size.x/2;
-	bottom_left.x -= m.functional_size.x/2;
-	
-	bottom_left.y += size.y/2;
-	bottom_left.y -= m.functional_size.y/2;
-	
-	draw_text(font, label, font_height, bottom_left, v2(1, 1), COLOR_WHITE);
-	
-	return pressed;
+    float mx = input_frame.mouse_x - window.width / 2;
+    float my = input_frame.mouse_y - window.height / 2;
+
+    bool pressed = false;
+
+    if (mx >= L && mx < R && my >= B && my < T) {
+        color = v4(.15, .15, .15, 1);
+        if (is_key_down(MOUSE_BUTTON_LEFT)) {
+            color = v4(.05, .05, .05, 1);
+        }
+
+        pressed = is_key_just_released(MOUSE_BUTTON_LEFT);
+    }
+
+    if (enabled) {
+        color = v4_sub(color, v4(.2, .2, .2, 0));
+    }
+
+    draw_rect(pos, size, color);
+
+    Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
+    if (m.visual_size.x <= 0 || m.visual_size.y <= 0) {
+        return false; // Handle invalid metrics
+    }
+
+    Vector2 bottom_left = v2_sub(pos, m.functional_pos_min);
+    bottom_left.x += size.x / 2;
+    bottom_left.x -= m.functional_size.x / 2;
+
+    bottom_left.y += size.y / 2;
+    bottom_left.y -= m.functional_size.y / 2;
+
+    draw_text(font, label, font_height, bottom_left, v2(1, 1), COLOR_WHITE);
+
+    return pressed;
 }
 
 void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_main_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
 		
-		string label = STR("Main Menu");
+		// Create the label using sprint
+		string label = sprint(get_temporary_allocator(), STR("Main Menu"));
 		u32 font_height = 48;
 		float button_size = 200;
 		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
@@ -781,19 +793,21 @@ void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
 		
 		// Play Option
-		if (draw_button(font_light, font_height, STR("Play"), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Play")), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
+			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 			is_main_menu_active = false;  // Close menu
         	is_game_paused = false;       // Resume game
 		}
 
 		// Settings Option
-		if (draw_button(font_light, font_height, STR("Settings"), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
-			is_settings_menu_active = true;   // Open settings menu
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Settings")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
+			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 			is_main_menu_active = false;      // Close main menu
+			is_settings_menu_active = true;   // Open settings menu
 		}
 
 		// Quit Option
-		if (draw_button(font_light, font_height, STR("Quit"), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
 			window.should_close = true;  // Quit game
 		}
 	}
@@ -801,40 +815,40 @@ void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 
 void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_settings_menu_active) {
-		// Draw a semi-transparent background
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
 
-		string label = STR("Settings");
+		// Create the label using sprint
+		string label = sprint(get_temporary_allocator(), STR("Settings"));
 		u32 font_height = 48;
 		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
-
 		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
 
 		Vector2 button_size = v2(200, font_height);
 		int y = 0;
 
 		// Sound Settings Option
-		if (draw_button(font_light, font_height, STR("Sound"), v2(-button_size.x / 2, y), button_size, true)) {
-			// Toggle sound settings (not implemented)
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Sound")), v2(-button_size.x / 2, y), button_size, true)) {
+			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 		}
 		y -= button_size.y;
 		// Graphics Settings Option
-		if (draw_button(font_light, font_height, STR("Graphics"), v2(-button_size.x / 2, y), button_size, true)) {
-			// Open graphics settings (not implemented)
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Graphics")), v2(-button_size.x / 2, y), button_size, true)) {
+			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 		}
 		y -= button_size.y;
 		// Controls Settings Option
-		if (draw_button(font_light, font_height, STR("Controls"), v2(-button_size.x / 2, y), button_size, true)) {
-			// Open controls settings (not implemented)
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Controls")), v2(-button_size.x / 2, y), button_size, true)) {
+			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 		}
 		y -= button_size.y;
 		// Back Button to return to Main Menu
-		if (draw_button(font_light, font_height, STR("Back"), v2(-button_size.x / 2, y), button_size, true)) {
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Back")), v2(-button_size.x / 2, y), button_size, true)) {
 			is_settings_menu_active = false;  // Close settings menu
 			is_main_menu_active = true;       // Return to main menu
 		}
 	}
 }
+
 
 void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -898,13 +912,12 @@ int entry(int argc, char **argv) {
 	s32 frame_count = 0;
 	int latest_fps;
 	int latest_entites;
+	const u32 font_height = 48;
 	float64 last_time = os_get_elapsed_seconds();
 
 	world = alloc(get_heap_allocator(), sizeof(World));
 	memset(world, 0, sizeof(World));
 
-	const u32 font_height = 48;
-	
 	Gfx_Font *font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
 	assert(font_light, "Failed loading './res/fonts/Abaddon Light.ttf'");
 
@@ -913,11 +926,15 @@ int entry(int argc, char **argv) {
 	
 	Gfx_Image* heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
 	assert(heart_sprite, "Failed loading 'res/textures/heart.png'");
-	
+
+	Gfx_Image* power_up_heart_sprite = load_image_from_disk(STR("res/textures/powerup_heart.png"), get_heap_allocator());
+	assert(heart_sprite, "Failed loading 'res/textures/powerup_heart.png'");
+
 	// Here we create the player object
 	Player* player = create_player();
 	
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+	world->world_background = COLOR_BLACK;
 
 	// --------------------------------
 	float random_position_power_up = get_random_int_in_range(-10, 10);
@@ -931,6 +948,8 @@ int entry(int argc, char **argv) {
 
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
+
+		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background);
 
 		// main code loop here --------------
 		if (is_key_just_pressed(KEY_TAB)) 
@@ -1053,12 +1072,14 @@ int entry(int argc, char **argv) {
 				if (entity->position.x <=  -PLAYABLE_WIDTH / 2 || entity->position.x >=  PLAYABLE_WIDTH / 2)
 				{
 					projectile_bounce_world(entity);
+					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
 				}
 
 				if (entity->position.y <= -window.height / 2)
 				{
 					if (!mercy_bottom){
 						number_of_shots_missed++;
+						play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
 					}
 					entity_destroy(entity);
 				}
@@ -1067,6 +1088,7 @@ int entry(int argc, char **argv) {
 				{
 					if (!mercy_top) {
 						number_of_shots_missed++;
+						play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
 					}
 					entity_destroy(entity);
 				}
@@ -1086,9 +1108,17 @@ int entry(int argc, char **argv) {
 						Vector4 col = entity->color;
 						entity->color = v4(col.x, col.y, col.z, a);
 					}
-					
+
 					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-					draw_circle(draw_position, entity->size, entity->color);
+
+					if (entity->entitytype == POWERUP_ENTITY && entity->power_up_type == HEALTH_POWER_UP)
+					{
+						draw_image(power_up_heart_sprite, draw_position, entity->size, v4(1, 1, 1, 1));
+					}
+					else
+					{
+						draw_circle(draw_position, entity->size, entity->color);
+					}
 				}
 
 				if (entity->entitytype == PLAYER_ENTITY || entity->entitytype == OBSTACLE_ENTITY) 
@@ -1209,6 +1239,7 @@ int entry(int argc, char **argv) {
 		game_over = number_of_shots_missed >= number_of_hearts;
 
 		if (game_over) {
+			play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
 			current_stage_level = 0;
 			number_of_shots_missed = 0;
 			clean_world();
@@ -1216,8 +1247,8 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 		}
 
-		int heart_size = 30;
-		int heart_padding = 10;
+		int heart_size = 50;
+		int heart_padding = 0;
 		for (int i = 0; i < max(number_of_hearts - number_of_shots_missed, 0); i++) {
 			Vector2 heart_position = v2(window.width / 2 - (heart_size+heart_padding)*number_of_hearts, heart_size - window.height / 2);
 			heart_position = v2_add(heart_position, v2((heart_size + heart_padding)*i, 0));
@@ -1237,8 +1268,9 @@ int entry(int argc, char **argv) {
 		
 		draw_settings_menu(font_light, font_bold);
 		draw_main_menu(font_light, font_bold);
-		os_update(); 
+		os_update();
 		gfx_update();
+
 		seconds_counter += delta_t;
 		frame_count += 1;
 		if (seconds_counter > 1.0) {
