@@ -81,6 +81,7 @@ typedef struct Entity {
 	Vector2 grid_position;
 	// Projectile
 	int n_bounces;
+	int max_bounces;
 	// Power UP
 	enum PowerUpType power_up_type;
 	enum PowerUpSpawn power_up_spawn;
@@ -413,6 +414,7 @@ void summon_projectile_player(Entity* entity, Player* player) {
 	int setup_y_offset = 20;
 	entity->size = v2(10, 10);
 	entity->health = 1;
+	entity->max_bounces = 100;
 	entity->position = v2_add(player->entity->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->entity->position.x, player->entity->position.y + setup_y_offset)));
@@ -424,6 +426,7 @@ void summon_projectile_drop(Entity* entity, Entity* obstacle) {
 
 	entity->size = v2(10, 10);
 	entity->health = 1;
+	entity->max_bounces = 100;
 	entity->position = v2_add(obstacle->position, v2(0, -20));
 	entity->color = v4(1, 0, 0, 0.5);
 	entity->velocity = v2(0, -50);
@@ -553,7 +556,9 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 
 void projectile_bounce_world(Entity* projectile) {
 	projectile->n_bounces++;
-
+	if (projectile->n_bounces >= projectile->max_bounces) {
+		entity_destroy(projectile);
+	}
 	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
 	play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
