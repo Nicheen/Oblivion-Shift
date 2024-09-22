@@ -95,12 +95,8 @@ typedef struct Player{
 	Entity* entity;
 	float max_speed;
 	float min_speed;
-<<<<<<< HEAD
+	Debuff player_debuffs[MAX_ENTITY_COUNT];
 } Player;
-=======
-	Debuff player_debuff[MAX_ENTITY_COUNT];
-}
->>>>>>> 64a632693fba5cf33b4cc4ff7fb00965c085fc42
 
 typedef struct ObstacleTuple {
 	Entity* obstacle;
