@@ -538,7 +538,9 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
-
+	if (projectile->n_bounces >= projectile->max_bounces) {
+		entity_destroy(projectile);
+	}
 	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
 
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
