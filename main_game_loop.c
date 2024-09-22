@@ -111,6 +111,7 @@ typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
 	Debuff world_debuffs[MAX_DEBUFF_COUNT];
+	Vector4 world_background;
 } World;
 World* world = 0;
 
@@ -857,6 +858,25 @@ void summon_world(float spawn_rate) {
 	}
 }
 
+void initialize_new_stage(World* world, int current_stage_level) {
+	if (current_stage_level <= 10) {
+		float r = 0.0f;
+		float g = (float)current_stage_level / 10.0f;
+		float b = 0.0f;
+		world->world_background = v4(r, g, b, 1.0f); // Background color
+	}
+	else if (current_stage_level <= 20) {
+		float stage_progress = current_stage_level - 10;
+		float r = stage_progress / 10.0f;
+		float g = 0.0f;
+		float b = 0.0f;
+		world->world_background = v4(r, g, b, 1.0f); // Background color
+	}
+	
+	clean_world();
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+}
+
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 600;
@@ -910,6 +930,17 @@ int entry(int argc, char **argv) {
 		{
 			consume_key_just_pressed(KEY_TAB);
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
+		}
+
+		for (char key = '1'; key <= '9'; key++) {
+			if (is_key_just_pressed(key) && debug_mode) {
+				consume_key_just_pressed(key);
+				int level_increment = key - '0';  // Convert char to the corresponding integer
+				current_stage_level += level_increment;
+				initialize_new_stage(world, current_stage_level);
+				window.clear_color = world->world_background;
+				break;  // Exit the loop after processing one key
+			}
 		}
 
 		if (is_key_just_pressed(KEY_ESCAPE)) {
@@ -1148,9 +1179,8 @@ int entry(int argc, char **argv) {
 		
 		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
-			clean_world();
-			float spawn_rate_increase = pow(2, current_stage_level);
-			summon_world((spawn_rate_increase/100) + SPAWN_RATE_ALL_OBSTACLES);
+			initialize_new_stage(world, current_stage_level);
+			window.clear_color = world->world_background;
 		}
 		
 		if (debug_mode) {
