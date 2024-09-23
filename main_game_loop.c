@@ -1043,10 +1043,6 @@ int entry(int argc, char **argv) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background);
 
 		// main code loop here --------------
-		// I din spel-loop:
-		apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
-		update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
-
 		if (is_key_just_pressed(KEY_TAB)) 
 		{
 			consume_key_just_pressed(KEY_TAB);
@@ -1312,8 +1308,9 @@ int entry(int argc, char **argv) {
 		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
-			//apply_debuff_to_player(player, DEBUFF_SLOW, 10.0f);  // Applicerar slow-debuff för 5 sekunder
-			
+			apply_debuff_to_player(player, DEBUFF_SLOW, 10.0f);  // Applicerar slow-debuff för 5 sekunder
+			apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
+			update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
 			window.clear_color = world->world_background;
 		}
 		
