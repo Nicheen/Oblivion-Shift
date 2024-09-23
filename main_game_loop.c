@@ -90,6 +90,9 @@ typedef struct Entity {
 
 typedef struct Debuff{
 	enum DebuffType debuff_type;
+	bool is_active;
+	float duration;
+	float elapsed_time;
 } Debuff;
 
 typedef struct Player{
@@ -477,6 +480,8 @@ void summon_power_up_drop(Entity* obstacle) {
 	entity->position = obstacle->position;
 	entity->power_up_spawn = POWER_UP_SPAWN_IN_OBSTACLE;
 }
+
+
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = OBSTACLE_ENTITY;
@@ -898,6 +903,56 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 }
 
+void apply_debuff_to_player(Player* player, DebuffType debuff_type, float duration) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (!player->player_debuffs[i].is_active) {
+            player->player_debuffs[i].debuff_type = debuff_type;
+            player->player_debuffs[i].is_active = true;
+            player->player_debuffs[i].duration = duration;
+            player->player_debuffs[i].elapsed_time = 0.0f;
+            break;
+        }
+    }
+}
+
+void apply_debuff_effects(Player* player) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (player->player_debuffs[i].is_active) {
+            switch (player->player_debuffs[i].debuff_type) {
+                case DEBUFF_SLOW:
+                    player->max_speed *= 0.5f;  // Halvera spelarens hastighet om slow-debuffen är aktiv
+                    break;
+
+                case DEBUFF_WEAKNESS:
+                    break;
+
+                case NIL_DEBUFF:
+                default:
+                    break;
+            }
+        }
+    }
+}
+
+void update_player_debuffs(Player* player, float delta_t) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (player->player_debuffs[i].is_active) {
+            // Endast öka tid om det inte är en permanent debuff
+            if (player->player_debuffs[i].duration > 0) {
+                player->player_debuffs[i].elapsed_time += delta_t;
+
+                // Kolla om debuffens tid är slut
+                if (player->player_debuffs[i].elapsed_time >= player->player_debuffs[i].duration) {
+                    player->player_debuffs[i].is_active = false;  // Inaktivera debuffen
+                    player->player_debuffs[i].debuff_type = NIL_DEBUFF;  // Ingen debuff
+                }
+            }
+        }
+    }
+}
+
+
+
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 600;
@@ -952,6 +1007,10 @@ int entry(int argc, char **argv) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background);
 
 		// main code loop here --------------
+		// I din spel-loop:
+		apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
+		update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
+
 		if (is_key_just_pressed(KEY_TAB)) 
 		{
 			consume_key_just_pressed(KEY_TAB);
@@ -1217,6 +1276,8 @@ int entry(int argc, char **argv) {
 		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
+			//apply_debuff_to_player(player, DEBUFF_SLOW, 10.0f);  // Applicerar slow-debuff för 5 sekunder
+			
 			window.clear_color = world->world_background;
 		}
 		
