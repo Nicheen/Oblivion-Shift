@@ -41,6 +41,17 @@ float64 delta_t;
 
 #define m4_identity m4_make_scale(v3(1, 1, 1))
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
+#define DETAIL_TYPE_ROUNDED_CORNERS 1
+#define DETAIL_TYPE_OUTLINED 2
+#define DETAIL_TYPE_OUTLINED_CIRCLE 3
+
+// With custom shading we can extend the rendering library!
+Draw_Quad *draw_rounded_rect(Vector2 p, Vector2 size, Vector4 color, float radius);
+Draw_Quad *draw_rounded_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float radius);
+Draw_Quad *draw_outlined_rect(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels);
+Draw_Quad *draw_outlined_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels);
+Draw_Quad *draw_outlined_circle(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels);
+Draw_Quad *draw_outlined_circle_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels);
 
 Vector2 MOUSE_POSITION() {
 	float mouseX = input_frame.mouse_x;
@@ -59,6 +70,11 @@ Vector2 MOUSE_POSITION() {
 	world_pos = m4_transform(view, world_pos);
 	return (Vector2){world_pos.x, world_pos.y};
 }
+
+typedef struct My_Cbuffer {
+	Vector2 mouse_pos_screen; // We use this to make a light around the mouse cursor
+	Vector2 window_size; // We only use this to revert the Y in the shader because for some reason d3d11 inverts it.
+} My_Cbuffer;
 
 typedef struct TimedEvent {
 	float interval;          // Time before the event starts
@@ -132,6 +148,92 @@ typedef struct World {
 	Vector4 world_background;
 } World;
 World* world = 0;
+
+Vector2 world_to_screen(Vector2 p) {
+    Vector4 in_cam_space  = m4_transform(draw_frame.camera_xform, v4(p.x, p.y, 0.0, 1.0));
+    Vector4 in_clip_space = m4_transform(draw_frame.projection, in_cam_space);
+    
+    Vector4 ndc = {
+        .x = in_clip_space.x / in_clip_space.w,
+        .y = in_clip_space.y / in_clip_space.w,
+        .z = in_clip_space.z / in_clip_space.w,
+        .w = in_clip_space.w
+    };
+    
+    return v2(
+        (ndc.x + 1.0f) * 0.5f * (f32)window.width,
+        (ndc.y + 1.0f) * 0.5f * (f32)window.height
+    );
+}
+Vector2 world_size_to_screen_size(Vector2 s) {
+    Vector2 origin = v2(0, 0);
+    
+    Vector2 screen_origin = world_to_screen(origin);
+    Vector2 screen_size_point = world_to_screen(s);
+    
+    return v2(
+        screen_size_point.x - screen_origin.x,
+        screen_size_point.y - screen_origin.y
+    );
+}
+
+Draw_Quad *draw_rounded_rect(Vector2 p, Vector2 size, Vector4 color, float radius) {
+	Draw_Quad *q = draw_rect(p, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_ROUNDED_CORNERS;
+	// corner_radius
+	q->userdata[0].y = radius;
+	return q;
+}
+Draw_Quad *draw_rounded_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float radius) {
+	Draw_Quad *q = draw_rect_xform(xform, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_ROUNDED_CORNERS;
+	// corner_radius
+	q->userdata[0].y = radius;
+	return q;
+}
+Draw_Quad *draw_outlined_rect(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels) {
+	Draw_Quad *q = draw_rect(p, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_OUTLINED;
+	// line_width_pixels
+	q->userdata[0].y = line_width_pixels;
+	// rect_size
+	q->userdata[0].zw = world_size_to_screen_size(size);
+	return q;
+}
+Draw_Quad *draw_outlined_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels) {
+	Draw_Quad *q = draw_rect_xform(xform, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_OUTLINED;
+	// line_width_pixels
+	q->userdata[0].y = line_width_pixels;
+	// rect_size
+	q->userdata[0].zw = world_size_to_screen_size(size);
+	return q;
+}
+Draw_Quad *draw_outlined_circle(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels) {
+	Draw_Quad *q = draw_rect(p, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_OUTLINED_CIRCLE;
+	// line_width_pixels
+	q->userdata[0].y = line_width_pixels;
+	// rect_size_pixels
+	q->userdata[0].zw = world_size_to_screen_size(size); // Transform world space to screen space
+	return q;
+}
+Draw_Quad *draw_outlined_circle_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels) {
+	Draw_Quad *q = draw_rect_xform(xform, size, color);
+	// detail_type
+	q->userdata[0].x = DETAIL_TYPE_OUTLINED_CIRCLE;
+	// line_width_pixels
+	q->userdata[0].y = line_width_pixels;
+	// rect_size_pixels
+	q->userdata[0].zw = world_size_to_screen_size(size); // Transform world space to screen space
+	
+	return q;
+}
 
 void update_timed_event(TimedEvent* event, float delta_t, void (*on_event)(void), int* is_game_paused) {
     if (!(*is_game_paused)) {
@@ -517,8 +619,6 @@ void summon_power_up_drop(Entity* obstacle) {
 	entity->power_up_spawn = POWER_UP_SPAWN_IN_OBSTACLE;
 }
 
-
-
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = OBSTACLE_ENTITY;
 
@@ -801,8 +901,8 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     if (enabled) {
         color = v4_sub(color, v4(.2, .2, .2, 0));
     }
-
-    draw_rect(pos, size, color);
+	
+    draw_rect(pos, size, color); 
 
     Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
     if (m.visual_size.x <= 0 || m.visual_size.y <= 0) {
@@ -889,7 +989,6 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 		}
 	}
 }
-
 
 void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -990,8 +1089,6 @@ void update_player_debuffs(Player* player, float delta_t) {
     }
 }
 
-
-
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 600;
@@ -1011,7 +1108,18 @@ int entry(int argc, char **argv) {
 
 	world = alloc(get_heap_allocator(), sizeof(World));
 	memset(world, 0, sizeof(World));
+	
+	// Shader Stuff
+	string source;
+	bool ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
+	assert(ok, "Could not read include/shaders.hlsl");
 
+	gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
+	dealloc_string(get_heap_allocator(), source);
+
+	My_Cbuffer cbuffer;
+
+	// Load in images and other stuff from disk
 	Gfx_Font *font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
 	assert(font_light, "Failed loading './res/fonts/Abaddon Light.ttf'");
 
@@ -1044,6 +1152,11 @@ int entry(int argc, char **argv) {
 		mouse_position = MOUSE_POSITION();
 
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background);
+
+		// Shader Stuff
+		cbuffer.mouse_pos_screen = v2(input_frame.mouse_x, input_frame.mouse_y);
+		cbuffer.window_size = v2(window.width, window.height);
+		draw_frame.cbuffer = &cbuffer;
 
 		// main code loop here --------------
 		if (is_key_just_pressed(KEY_TAB)) 
@@ -1105,8 +1218,15 @@ int entry(int argc, char **argv) {
 		// Uppdatera timern för power-up
         update_power_up_timer(player, delta_t);
 
-		draw_text(font_bold, sprint(get_temporary_allocator(), STR("%i"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
-
+		
+		{ // Draw the center stage level
+			// Create the label using sprint
+			string label = sprint(get_temporary_allocator(), STR("%i"), current_stage_level);
+			u32 font_height = 48 + (current_stage_level*4);
+			Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+			draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 0), v2(1, 1), COLOR_WHITE);
+		}
+		
 		// Entity Loop for drawing and everything else
 		int entity_counter = 0;
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -1211,6 +1331,7 @@ int entry(int argc, char **argv) {
 					}
 					else
 					{
+						draw_circle(v2_sub(draw_position, v2(1, 1)), v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
 						draw_circle(draw_position, entity->size, entity->color);
 					}
 				}
@@ -1282,12 +1403,12 @@ int entry(int argc, char **argv) {
 							Vector2 diff_size = v2_add(entity->size, v2(size_value, size_value));
 							
 							Vector2 draw_position = v2_sub(entity->position, v2_mulf(diff_size, 0.5));
-							draw_rect(draw_position, diff_size, entity->color);
+							draw_rounded_rect(draw_position, diff_size, entity->color, 0.1);
 						}
 						else
 						{
 							Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-							draw_rect(draw_position, entity->size, entity->color);
+							draw_rounded_rect(draw_position, entity->size, entity->color, 0.1);
 						}
 					}
 					else
@@ -1367,6 +1488,15 @@ int entry(int argc, char **argv) {
 		
 		draw_settings_menu(font_light, font_bold);
 		draw_main_menu(font_light, font_bold);
+
+		// Shader hot reloading
+		if (is_key_just_pressed('R')) {
+			ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
+			assert(ok, "Could not read include/shaders.hlsl");
+			gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
+			dealloc_string(get_heap_allocator(), source);
+		}
+
 		os_update();
 		gfx_update();
 
