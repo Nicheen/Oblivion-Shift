@@ -955,11 +955,14 @@ void apply_debuff_effects(Player* player) {
     for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
         if (player->player_debuffs[i].is_active) {
             switch (player->player_debuffs[i].debuff_type) {
-                case DEBUFF_SLOW:
+                case DEBUFF_SLOW_PLAYER:
                     player->max_speed *= 0.5f;  // Halvera spelarens hastighet om slow-debuffen är aktiv
                     break;
+				
+				case DEBUFF_SLOW_PROJECTILE: //Projectile är inte med i struct player...
+                    break;
 
-                case DEBUFF_WEAKNESS:
+                case DEBUFF_WEAKNESS: //Tänkte ha att man skadar 50% av vad man tidigare gjorde men måste ändra health till float då
                     break;
 
                 case NIL_DEBUFF:
@@ -1308,9 +1311,11 @@ int entry(int argc, char **argv) {
 		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
-			apply_debuff_to_player(player, DEBUFF_SLOW, 10.0f);  // Applicerar slow-debuff för 5 sekunder
-			apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
-			update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
+			if (current_stage_level == 10){
+				apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
+				apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
+				update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
+			}
 			window.clear_color = world->world_background;
 		}
 		

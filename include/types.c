@@ -45,8 +45,11 @@ typedef enum PowerUpType {
 typedef enum DebuffType {
 	NIL_DEBUFF = 0,
 
-	DEBUFF_SLOW = 1,
-	DEBUFF_WEAKNESS = 2,
+	DEBUFF_SLOW_PLAYER = 1,
+	DEBUFF_GLIDE_PLAYER = 2,
+	DEBUFF_SLOW_PROJECTILE = 3,
+	DEBUFF_WEAKNESS = 4,
+
 
 	MAX_DEBUFF,
 } DebuffType;
