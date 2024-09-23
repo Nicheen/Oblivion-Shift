@@ -132,6 +132,11 @@ typedef struct Player{
 	PowerUp player_powerups[MAX_POWERUP_COUNT];
 } Player;
 
+typedef struct Boss {
+	Entity* entity;
+	// add more stuff here
+} Boss;
+
 typedef struct ObstacleTuple {
 	Entity* obstacle;
 	int x;
@@ -437,6 +442,20 @@ Player* create_player() {
 	player->entity->deceleration = v2(5000.0f, 0.0f);
     
     return player;
+}
+
+Boss* create_boss() {
+	Boss* boss = 0;
+	boss = alloc(get_heap_allocator(), sizeof(Boss));
+	memset(boss, 0, sizeof(Boss));
+
+	boss->entity = entity_create();
+	boss->entity->entitytype = BOSS_ENTITY;
+	boss->entity->health = 10;
+	boss->entity->color = COLOR_YELLOW;
+	boss->entity->size = v2(50, 50);
+
+	return boss;
 }
 
 void update_player_position(Player* player, float delta_t) {
@@ -814,6 +833,28 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	}
 }
 
+bool timer_finished(TimedEvent* timed_event, float delta_t) {
+	timed_event->interval_timer += delta_t; // Update the timer
+
+	// Lerp progress calculation
+	timed_event->progress = timed_event->interval_timer / timed_event->duration;
+
+	// Check if the timer has exceeded the switch interval
+	if (timed_event->interval_timer >= timed_event->interval) {
+		// Reset the timer and switch colors
+		timed_event->interval_timer -= timed_event->interval;
+
+		return true;
+	}
+
+	// Ensure progress is clamped between 0 and 1
+	if (timed_event->progress > 1.0f) {
+		timed_event->progress = 1.0f;
+	}
+
+	return false;
+}
+
 void apply_power_up(Entity* power_up, Player* player) {
 	switch(power_up->power_up_type) 
 	{
@@ -1019,16 +1060,28 @@ void summon_world(float spawn_rate) {
 	}
 }
 
+// !!!! Here we do all the stage stuff, not in the game loop !!!!
+// Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
-	if (current_stage_level <= 10) {
+	if (current_stage_level < 10) {
 		float r = 0.0f;
-		float g = (float)current_stage_level / 10.0f;
+		float g = (float)current_stage_level / 20.0f;
 		float b = 0.0f;
 		world->world_background = v4(r, g, b, 1.0f); // Background color
 	}
+	else if (current_stage_level == 10) {
+		log("trying to create boss");
+		Boss* boss = create_boss();
+		log("Boss was created");
+		// It would be nice to need to pass both the player and delta_t through here. 
+		// Fix could be to add the player and the delta_t to the world struct. Will have to think more about it
+		//apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
+		//apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
+		//update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
+	}
 	else if (current_stage_level <= 20) {
 		float stage_progress = current_stage_level - 10;
-		float r = stage_progress / 10.0f;
+		float r = stage_progress / 20.0f;
 		float g = 0.0f;
 		float b = 0.0f;
 		world->world_background = v4(r, g, b, 1.0f); // Background color
@@ -1138,6 +1191,19 @@ int entry(int argc, char **argv) {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	world->world_background = COLOR_BLACK;
 
+	// Here we create all the timers
+
+	// Initialize the TimedEvent struct
+	TimedEvent color_switch_event = {
+		.interval = 4.0f,          // Time in seconds between color switches
+		.interval_timer = 0.0f,    // Start timer at 0
+		.duration = 4.0f,          // Duration of the transition (not used here)
+		.progress = 0.0f           // Progress of the event
+	};
+
+	// Index to track current color
+	int current_color_index = 0;
+
 	// --------------------------------
 	float random_position_power_up = get_random_int_in_range(-10, 10);
 	while (!window.should_close) {
@@ -1245,6 +1311,13 @@ int entry(int argc, char **argv) {
 					if (entity == other_entity) continue;
 					if (collision) break;
 					switch(other_entity->entitytype) {
+						case(BOSS_ENTITY): {
+							if (circle_rect_collision(entity, other_entity)) 
+							{
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							} 
+						} break;
 						case(PLAYER_ENTITY): {
 							if (circle_rect_collision(entity, other_entity)) 
 							{
@@ -1336,7 +1409,7 @@ int entry(int argc, char **argv) {
 					}
 				}
 
-				if (entity->entitytype == PLAYER_ENTITY || entity->entitytype == OBSTACLE_ENTITY) 
+				if (entity->entitytype == PLAYER_ENTITY || entity->entitytype == OBSTACLE_ENTITY || entity->entitytype == BOSS_ENTITY) 
 				{
 					if (entity->entitytype == OBSTACLE_ENTITY) 
 					{
@@ -1432,11 +1505,6 @@ int entry(int argc, char **argv) {
 		if (obstacle_count - number_of_block_obstacles <= 0) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
-			if (current_stage_level == 10){
-				apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
-				apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
-				update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
-			}
 			window.clear_color = world->world_background;
 		}
 		
@@ -1480,11 +1548,37 @@ int entry(int argc, char **argv) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 		}
 
-		float wave = 15*(sin(now) + 1);
-		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave + 10.0f, v4(0, (float)84/255, (float)119/225, 1));
-		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave + 10.0f, v4(0, (float)84/255, (float)119/225, 1));
+		float wave = 5*(sin(now) + 3);
+
 		draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
+		
+		// Use uint32_t instead of s64
+		uint32_t lava_colors[5] = {
+			0xff2500ff,
+			0xff6600ff,
+			0xf2f217ff,
+			0xea5c0fff,
+			0xe56520ff
+		};
+
+		Vector4 rgba_colors[5];
+		for (int i = 0; i < 5; i++) {
+			rgba_colors[i] = hex_to_rgba(lava_colors[i]);
+		}
+
+		if (timer_finished(&color_switch_event, delta_t)) 
+		{
+			current_color_index++;
+			if (current_color_index == 4) {
+				current_color_index = 0;
+			}
+		}
+
+		Vector4 color = v4_lerp(rgba_colors[current_color_index], rgba_colors[current_color_index + 1], color_switch_event.progress);
+
+		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, color);
+		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, color);
 		
 		draw_settings_menu(font_light, font_bold);
 		draw_main_menu(font_light, font_bold);

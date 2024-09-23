@@ -61,6 +61,7 @@ typedef enum EntityType {
 	PROJECTILE_ENTITY = 2,
 	OBSTACLE_ENTITY = 3,
 	POWERUP_ENTITY = 4,
+	BOSS_ENTITY = 5,
 
 	MAX_ENTITY,
 } EntityType;
