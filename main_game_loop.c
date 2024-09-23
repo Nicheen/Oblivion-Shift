@@ -60,6 +60,13 @@ Vector2 MOUSE_POSITION() {
 	return (Vector2){world_pos.x, world_pos.y};
 }
 
+typedef struct TimedEvent {
+	float interval;          // Time before the event starts
+    float interval_timer;    // Timer for the interval
+    float duration;          // Duration of the event
+    float progress;          // Current progress of the event
+} TimedEvent;
+
 typedef struct Entity {
 	// --- Entity Attributes ---
 	enum EntityType entitytype;
@@ -83,10 +90,14 @@ typedef struct Entity {
 	// Projectile
 	int n_bounces;
 	int max_bounces;
-	// Power UP
 	enum PowerUpType power_up_type;
 	enum PowerUpSpawn power_up_spawn;
 } Entity;
+
+typedef struct PowerUp{
+	enum PowerUpType power_up_type;
+	enum PowerUpSpawn power_up_spawn;
+} PowerUp;
 
 typedef struct Debuff{
 	enum DebuffType debuff_type;
@@ -99,6 +110,7 @@ typedef struct Player{
 	float max_bounce;
 	float damp_bounce;
 	Debuff player_debuffs[MAX_DEBUFF_COUNT];
+	PowerUp player_powerups[MAX_POWERUP_COUNT];
 } Player;
 
 typedef struct ObstacleTuple {
@@ -113,9 +125,33 @@ typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
 	Debuff world_debuffs[MAX_DEBUFF_COUNT];
+	PowerUp world_powerups[MAX_POWERUP_COUNT];
 	Vector4 world_background;
 } World;
 World* world = 0;
+
+void update_timed_event(TimedEvent* event, float delta_t, void (*on_event)(void), int* is_game_paused) {
+    if (!(*is_game_paused)) {
+        event->interval_timer += delta_t;
+    }
+
+    if (event->interval_timer >= event->interval) {
+        float time_left = event->duration - event->progress;
+        
+        if (time_left > 0) {
+            event->progress += delta_t;
+            float progress_ratio = (event->duration - time_left) / event->duration;
+            on_event();  // Call the event action function
+
+            // Optional: You can also add logic for drawing or updating visuals here
+        } else {
+            // Reset for next interval if the duration has completed
+            event->interval = get_random_float32_in_range(15.0f, 30.0f); // Set next interval
+            event->interval_timer = 0.0f; // Reset timer
+            event->progress = 0.0f; // Reset progress
+        }
+    }
+}
 
 // Function to check clearance below a tile
 bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
