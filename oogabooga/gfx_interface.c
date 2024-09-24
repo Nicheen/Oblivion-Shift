@@ -125,8 +125,7 @@ Gfx_Image *load_image_from_disk(string path, Allocator allocator) {
     return image;
 }
 
-void 
-delete_image(Gfx_Image *image) {
+void delete_image(Gfx_Image *image) {
       // Free the image data allocated by stb_image
     image->width = 0;
     image->height = 0;

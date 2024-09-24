@@ -1135,8 +1135,7 @@ void gfx_deinit_image(Gfx_Image *image) {
 	ID3D11Resource_Release(resource);
 }
 
-bool 
-gfx_shader_recompile_with_extension(string ext_source, u64 cbuffer_size) {
+bool gfx_shader_recompile_with_extension(string ext_source, u64 cbuffer_size) {
 	assert(context.thread_id == d3d11_thread_id, "gfx_ functions must be called on the main thread");
 
 	string source = string_replace_all(STR(d3d11_image_shader_source), STR("$INJECT_PIXEL_POST_PROCESS"), ext_source, get_temporary_allocator());
