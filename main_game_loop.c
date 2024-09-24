@@ -4,7 +4,7 @@
 #include "include/GlobalVariables.c"
 #include "include/config.c"
 #include "include/easings.c"
-#include "include/TypesAndStructs.c"
+#include "include/Types.c"
 #include "include/Structs.c"
 #include "include/particlesystem.c"
 #include "include/IndependentFunctions.c"
