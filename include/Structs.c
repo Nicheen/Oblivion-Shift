@@ -8,10 +8,13 @@ typedef struct My_Cbuffer {
 } My_Cbuffer;
 
 typedef struct TimedEvent {
+    bool is_valid;
+    TimedEventType type;     // Which timed event are we referencing
 	float interval;          // Time before the event starts
     float interval_timer;    // Timer for the interval
     float duration;          // Duration of the event
     float progress;          // Current progress of the event
+    int counter;             // Count how many loops we have done (useful)
 } TimedEvent;
 
 typedef struct Entity {
@@ -79,7 +82,10 @@ typedef struct ObstacleTuple {
 typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
+    TimedEvent timedevents[MAX_ENTITY_COUNT];
+
 	Debuff world_debuffs[MAX_DEBUFF_COUNT];
 	PowerUp world_powerups[MAX_POWERUP_COUNT];
+
 	Vector4 world_background;
 } World;

@@ -219,6 +219,23 @@ Entity* entity_create() {
 	entity_found->is_valid = true;
 	return entity_found;
 }
+TimedEvent* timedevent_create(World* world) {
+	TimedEvent* timedevent_found = 0;
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		TimedEvent* existing_timedevent = &world->timedevents[i];
+		if (!existing_timedevent->is_valid) {
+			timedevent_found = existing_timedevent;
+			break;
+		}
+	}
+	assert(timedevent_found, "No more free timedevent slots!");
+	timedevent_found->is_valid = true;
+	return timedevent_found;
+}
+
+void timedevent_destroy(TimedEvent* timedevent) {
+	memset(timedevent, 0, sizeof(TimedEvent));
+}
 
 void entity_destroy(Entity* entity) {
 	memset(entity, 0, sizeof(Entity));
@@ -777,27 +794,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	}
 }
 
-bool timer_finished(TimedEvent* timed_event, float delta_t) {
-	timed_event->interval_timer += delta_t; // Update the timer
 
-	// Lerp progress calculation
-	timed_event->progress = timed_event->interval_timer / timed_event->duration;
-
-	// Check if the timer has exceeded the switch interval
-	if (timed_event->interval_timer >= timed_event->interval) {
-		// Reset the timer and switch colors
-		timed_event->interval_timer -= timed_event->interval;
-
-		return true;
-	}
-
-	// Ensure progress is clamped between 0 and 1
-	if (timed_event->progress > 1.0f) {
-		timed_event->progress = 1.0f;
-	}
-
-	return false;
-}
 
 void apply_power_up(Entity* power_up, Player* player) {
 	switch(power_up->power_up_type) 
@@ -855,6 +852,59 @@ void update_power_up_timer(Player* player, float delta_t) {
             is_power_up_active = false; 
 		}
     }
+}
+
+bool timer_finished(TimedEvent* timed_event) {
+	// Progress calculation
+	timed_event->progress = timed_event->interval_timer / timed_event->duration;
+
+	// Check if the timer has exceeded the switch interval
+	if (timed_event->interval_timer >= timed_event->interval) {
+		// Reset the timer
+		timed_event->interval_timer -= timed_event->interval;
+
+		return true;
+	}
+
+	// Ensure progress is clamped between 0 and 1
+	timed_event->progress = fminf(fmaxf(timed_event->progress, 0.0f), 1.0f);
+
+	return false;
+}
+
+void draw_death_borders(TimedEvent* timedevent, float delta_t) {
+
+	// Use uint32_t instead of s64
+	uint32_t lava_colors[5] = {
+		0xff2500ff,
+		0xff6600ff,
+		0xf2f217ff,
+		0xea5c0fff,
+		0xe56520ff
+	};
+
+	Vector4 rgba_colors[5];
+	for (int i = 0; i < 5; i++) {
+		rgba_colors[i] = hex_to_rgba(lava_colors[i]);
+	}
+
+	timedevent->interval_timer += delta_t; // Update the timer
+
+	if (timer_finished(timedevent)) {
+		timedevent->counter++;
+		if (timedevent->counter == 4) {
+			timedevent->counter = 0;
+		}
+	}
+
+	int next_color_index = (timedevent->counter + 1) % 5;
+	Vector4 color = v4_lerp(rgba_colors[timedevent->counter], rgba_colors[next_color_index], timedevent->progress);
+
+	float wave = 5*(sin(os_get_elapsed_seconds()) + 3);	
+	
+	draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, color);
+	draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, color);
+
 }
 
 bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vector2 size, bool enabled) {
@@ -1111,6 +1161,19 @@ void update_player_debuffs(Player* player, float delta_t) {
     }
 }
 
+TimedEvent* initialize_color_switch_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = EVENT_COLOR_SWITCH;
+	te->interval = 4.0f;
+	te->interval_timer = 0.0f;
+	te->duration = 4.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 600;
@@ -1118,6 +1181,7 @@ int entry(int argc, char **argv) {
 	window.x = 200;
 	window.y = 200;
 	window.clear_color = COLOR_BLACK; // Background color
+	window.fullscreen = true;
 
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
@@ -1160,18 +1224,10 @@ int entry(int argc, char **argv) {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	world->world_background = COLOR_BLACK;
 
-	// Here we create all the timers
-
-	// Initialize the TimedEvent struct
-	TimedEvent color_switch_event = {
-		.interval = 4.0f,          // Time in seconds between color switches
-		.interval_timer = 0.0f,    // Start timer at 0
-		.duration = 4.0f,          // Duration of the transition (not used here)
-		.progress = 0.0f           // Progress of the event
-	};
-
-	// Index to track current color
-	int current_color_index = 0;
+	// -----------------------------------------------------------------------
+	// TIMED EVENTS ARE MADE HERE
+	// -----------------------------------------------------------------------
+	TimedEvent* color_switch_event = initialize_color_switch_event(world);
 
 	// --------------------------------
 	float random_position_power_up = get_random_int_in_range(-10, 10);
@@ -1209,6 +1265,14 @@ int entry(int argc, char **argv) {
 				window.clear_color = world->world_background;
 				break;  // Exit the loop after processing one key
 			}
+		}
+
+		// Shader hot reloading
+		if (is_key_just_pressed('R') && debug_mode) {
+			ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
+			assert(ok, "Could not read include/shaders.hlsl");
+			gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
+			dealloc_string(get_heap_allocator(), source);
 		}
 
 		if (is_key_just_pressed(KEY_ESCAPE)) {
@@ -1504,6 +1568,23 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
+			 // Display TimedEvent parameters
+			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+				TimedEvent* te = &world->timedevents[i];
+				if (!te->is_valid) continue;
+
+				// Displaying information for each valid TimedEvent
+				draw_text(font_light, 
+					sprint(get_temporary_allocator(), 
+						STR("TimedEvent %d - Type: %d, Interval: %.2f, Timer: %.2f, Duration: %.2f, Progress: %.2f, Counter: %d"), 
+						i, te->type, te->interval, te->interval_timer, te->duration, te->progress, te->counter),
+					font_height, 
+					v2(-window.width / 2, window.height / 2 - 175 - (i * 25)),  // Adjust y-position for each TimedEvent
+					v2(0.4, 0.4), 
+					COLOR_GREEN
+				);
+			}
+			
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 				Entity* entity = &world->entities[i];
 				if (!entity->is_valid) continue;
@@ -1538,51 +1619,16 @@ int entry(int argc, char **argv) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 		}
 
-		float wave = 5*(sin(now) + 3);
 
 		draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 		draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
-		
-		// Use uint32_t instead of s64
-		uint32_t lava_colors[5] = {
-			0xff2500ff,
-			0xff6600ff,
-			0xf2f217ff,
-			0xea5c0fff,
-			0xe56520ff
-		};
 
-		Vector4 rgba_colors[5];
-		for (int i = 0; i < 5; i++) {
-			rgba_colors[i] = hex_to_rgba(lava_colors[i]);
-		}
+		draw_death_borders(color_switch_event, delta_t);
 
-		if (timer_finished(&color_switch_event, delta_t)) 
-		{
-			current_color_index++;
-			if (current_color_index == 4) {
-				current_color_index = 0;
-			}
-		}
-
-		Vector4 color = v4_lerp(rgba_colors[current_color_index], rgba_colors[current_color_index + 1], color_switch_event.progress);
-
-		draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, color);
-		draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, color);
-		
 		draw_settings_menu(font_light, font_bold);
 		draw_main_menu(font_light, font_bold);
 
-		// Shader hot reloading
-		if (is_key_just_pressed('R')) {
-			ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
-			assert(ok, "Could not read include/shaders.hlsl");
-			gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
-			dealloc_string(get_heap_allocator(), source);
-		}
-
 		os_update();
-		
 		gfx_update();
 
 		seconds_counter += delta_t;

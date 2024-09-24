@@ -2,6 +2,11 @@
 // Types (typedef enum)
 // -----------------------------------------------------------------------
 
+typedef enum TimedEventType {
+	NIL_EVENT = 0,
+	EVENT_COLOR_SWITCH = 1,
+} TimedEventType;
+
 typedef enum ParticleFlags {
     PARTICLE_FLAGS_valid = (1<<0),
 	PARTICLE_FLAGS_physics = (1<<1),
