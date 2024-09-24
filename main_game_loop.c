@@ -1228,9 +1228,7 @@ int entry(int argc, char **argv) {
 	// TIMED EVENTS ARE MADE HERE
 	// -----------------------------------------------------------------------
 	TimedEvent* color_switch_event = initialize_color_switch_event(world);
-
-	// --------------------------------
-	float random_position_power_up = get_random_int_in_range(-10, 10);
+	
 	while (!window.should_close) {
 		reset_temporary_storage();
 
@@ -1249,32 +1247,29 @@ int entry(int argc, char **argv) {
 		cbuffer.window_size = v2(window.width, window.height);
 		draw_frame.cbuffer = &cbuffer;
 
-		// main code loop here --------------
-		if (is_key_just_pressed(KEY_TAB)) 
+		// -----------------------------------------------------------------------
+		//                        HERE WE DO BUTTON INPUTS
+		// -----------------------------------------------------------------------
+		//
+		//                   BUTTONS USED ARE DOCUMENTED BELOW:
+		//
+		// KEY_TAB           = to switch debug mode on/off
+		// KEY_ESCAPE        = to open/close main menu
+		// MOUSE_BUTTON_LEFT = summon projectile at player towards mouse
+		// KEY_SPACEBAR      = ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		// 
+		//
+		//
+		// ---- BUTTONS THAT ONLY WORK IN DEBUG MODE ----
+		// 1-9 = Increment stage by that amount
+		// R   = Reload the shader file
+
+		if (is_key_just_pressed(KEY_TAB))
 		{
 			consume_key_just_pressed(KEY_TAB);
 			debug_mode = !debug_mode;  // Toggle debug_mode with a single line
 		}
-
-		for (char key = '1'; key <= '9'; key++) {
-			if (is_key_just_pressed(key) && debug_mode) {
-				consume_key_just_pressed(key);
-				int level_increment = key - '0';  // Convert char to the corresponding integer
-				current_stage_level += level_increment;
-				initialize_new_stage(world, current_stage_level);
-				window.clear_color = world->world_background;
-				break;  // Exit the loop after processing one key
-			}
-		}
-
-		// Shader hot reloading
-		if (is_key_just_pressed('R') && debug_mode) {
-			ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
-			assert(ok, "Could not read include/shaders.hlsl");
-			gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
-			dealloc_string(get_heap_allocator(), source);
-		}
-
+		
 		if (is_key_just_pressed(KEY_ESCAPE)) {
 			consume_key_just_pressed(KEY_ESCAPE);
 
@@ -1292,11 +1287,31 @@ int entry(int argc, char **argv) {
 				is_game_paused = true;
 			}
 		}
+		
+		if (debug_mode) {
+			for (char key = '1'; key <= '9'; key++) {
+				if (is_key_just_pressed(key)) {
+					consume_key_just_pressed(key);
+					int level_increment = key - '0';  // Convert char to the corresponding integer
+					current_stage_level += level_increment;
+					initialize_new_stage(world, current_stage_level);
+					window.clear_color = world->world_background;
+					break;  // Exit the loop after processing one key
+				}
+			}
 
+			// Shader hot reloading
+			if (is_key_just_pressed('R')) {
+				ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
+				assert(ok, "Could not read include/shaders.hlsl");
+				gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
+				dealloc_string(get_heap_allocator(), source);
+			}
+		}
+	
 		if (player->entity->is_valid && !game_over && !is_game_paused)
 		{
-			// Hantera vänsterklick
-			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) 
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
 			{
 				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
@@ -1306,27 +1321,36 @@ int entry(int argc, char **argv) {
 				number_of_shots_fired++;
 			}
 
-			//if (number_of_destroyed_obstacles % 5 == 0 && number_of_destroyed_obstacles != 0 && number_of_power_ups == 0){
-			//	Entity* power_up = entity_create();
-			//	setup_power_up(power_up);
-			//}
-			
+			else if (is_key_just_pressed(KEY_SPACEBAR)) 
+			{
+				consume_key_just_pressed(KEY_SPACEBAR);
+
+				Entity* projectile = entity_create();
+				summon_projectile_player(projectile, player);
+
+				number_of_shots_fired++;
+			}
+
 			update_player_position(player, delta_t);
+        	update_power_up_timer(player, delta_t);
 		}
 
-		// Uppdatera timern för power-up
-        update_power_up_timer(player, delta_t);
+		// -----------------------------------------------------------------------
+		//                      DRAW CENTER TEXT (STAGE LEVEL)
+		// -----------------------------------------------------------------------
 
-		
-		{ // Draw the center stage level
+		{
 			// Create the label using sprint
 			string label = sprint(get_temporary_allocator(), STR("%i"), current_stage_level);
 			u32 font_height = 48 + (current_stage_level*4);
 			Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
 			draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 0), v2(1, 1), COLOR_WHITE);
 		}
-		
-		// Entity Loop for drawing and everything else
+
+		// -----------------------------------------------------------------------
+		//              Entity Loop for drawing and everything else
+		// -----------------------------------------------------------------------
+
 		int entity_counter = 0;
 		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 			Entity* entity = &world->entities[i];
@@ -1422,6 +1446,7 @@ int entry(int argc, char **argv) {
 					if (entity->entitytype == POWERUP_ENTITY && !is_game_paused)
 					{
 						if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
+							float random_position_power_up = get_random_int_in_range(-PLAYABLE_WIDTH, PLAYABLE_WIDTH);
 							entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(t + random_position_power_up), -100);
 						}
 						float a = 0.2 * sin(7*t) + 0.8;
