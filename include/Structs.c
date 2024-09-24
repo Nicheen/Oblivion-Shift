@@ -9,15 +9,19 @@ typedef struct My_Cbuffer {
 
 typedef struct TimedEvent {
     bool is_valid;
+	TimedEventWorldType worldtype;
     TimedEventType type;     // Which timed event are we referencing
 	float interval;          // Time before the event starts
     float interval_timer;    // Timer for the interval
-    float duration;          // Duration of the event
+    float duration;
+    float duration_timer;          // Duration of the event
     float progress;          // Current progress of the event
     int counter;             // Count how many loops we have done (useful)
 } TimedEvent;
 
 typedef struct Entity {
+    TimedEvent* timer;
+	struct Entity* child;
 	// --- Entity Attributes ---
 	enum EntityType entitytype;
 	Vector2 size;

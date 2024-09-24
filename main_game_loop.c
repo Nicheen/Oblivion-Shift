@@ -221,6 +221,8 @@ Entity* entity_create() {
 }
 TimedEvent* timedevent_create(World* world) {
 	TimedEvent* timedevent_found = 0;
+	timedevent_found = alloc(get_heap_allocator(), sizeof(TimedEvent));
+	memset(timedevent_found, 0, sizeof(TimedEvent));
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		TimedEvent* existing_timedevent = &world->timedevents[i];
 		if (!existing_timedevent->is_valid) {
@@ -500,6 +502,34 @@ void play_random_blop_sound() {
     }
 }
 
+TimedEvent* initialize_color_switch_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = EVENT_COLOR_SWITCH;
+	te->worldtype = WORLD_TIMER;
+	te->interval = 4.0f;
+	te->interval_timer = 0.0f;
+	te->duration = 0.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
+TimedEvent* initialize_beam_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = BEAM_EVENT;
+	te->worldtype = ENTITY_TIMER;
+	te->interval = 15.0f;
+	te->interval_timer = get_random_float32_in_range(0, te->interval);
+	te->duration = 1.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
 void summon_projectile_player(Entity* entity, Player* player) {
 	entity->entitytype = PROJECTILE_ENTITY;
 
@@ -616,6 +646,8 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	}
 	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE + SPAWN_RATE_POWERUP_OBSTACLE) {
         entity->obstacle_type = BEAM_OBSTACLE;
+		TimedEvent* timed_event = initialize_beam_event(world);
+		entity->timer = timed_event;
         entity->health = 1;  // Strålen kan inte förstöras
         entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
         entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
@@ -634,6 +666,14 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	world->obstacle_list[obstacle_count].x = x_index;
 	world->obstacle_list[obstacle_count].y = y_index;
 	obstacle_count++;
+}
+
+void setup_beam(Entity* beam_obstacle, Entity* beam) {
+	beam->color = v4(1, 0, 0, 0.7);
+	float beam_height = beam_obstacle->size.y + window.height;
+	beam->size = v2(5, beam_height);
+	float beam_y_position = beam_obstacle->position.y - beam_height / 2 - beam_obstacle->size.y / 2;
+	beam->position = v2(beam_obstacle->position.x, beam_y_position);
 }
 
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
@@ -776,7 +816,6 @@ bool rect_rect_collision(Entity* rect1, Entity* rect2) {
     return true; // Överlappning
 }
 
-
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
@@ -792,6 +831,11 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 		entity_destroy(projectile);
 		play_random_blop_sound();
 	}
+}
+
+void handle_beam_collision(Entity* beam, Entity* player) {
+	int damage = 1.0f; // This can be changes in the future
+	number_of_shots_missed++;
 }
 
 
@@ -854,23 +898,40 @@ void update_power_up_timer(Player* player, float delta_t) {
     }
 }
 
-bool timer_finished(TimedEvent* timed_event) {
+bool timer_finished(TimedEvent* timed_event, float delta_t) {
+    // Update the timer with the elapsed time
+    if (!is_game_paused) timed_event->interval_timer += delta_t;
+
 	// Progress calculation
-	timed_event->progress = timed_event->interval_timer / timed_event->duration;
-
-	// Check if the timer has exceeded the switch interval
-	if (timed_event->interval_timer >= timed_event->interval) {
-		// Reset the timer
-		timed_event->interval_timer -= timed_event->interval;
-
-		return true;
-	}
+	timed_event->progress = timed_event->interval_timer / timed_event->interval;
 
 	// Ensure progress is clamped between 0 and 1
 	timed_event->progress = fminf(fmaxf(timed_event->progress, 0.0f), 1.0f);
 
+	// Check if the timer has exceeded the switch interval
+	if (timed_event->interval_timer >= timed_event->interval) {
+
+		if (timed_event->duration_timer < timed_event->duration)
+		{
+			if (!is_game_paused) timed_event->duration_timer += delta_t;
+			return true;
+		}
+		else if (timed_event->duration_timer > timed_event->duration)
+		{
+			timed_event->duration_timer = 0;
+		}
+		
+		timed_event->interval_timer -= timed_event->interval; // Reset the timer
+		timed_event->counter++;
+		return true;
+	}
+	else if (timed_event->interval_timer >= timed_event->interval) {
+		return true;
+	}
+
 	return false;
 }
+
 
 void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 
@@ -888,10 +949,7 @@ void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 		rgba_colors[i] = hex_to_rgba(lava_colors[i]);
 	}
 
-	timedevent->interval_timer += delta_t; // Update the timer
-
-	if (timer_finished(timedevent)) {
-		timedevent->counter++;
+	if (timer_finished(timedevent, delta_t)) {
 		if (timedevent->counter == 4) {
 			timedevent->counter = 0;
 		}
@@ -1028,8 +1086,12 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
+		TimedEvent* timer = &world->timedevents[i];
 		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
 			entity_destroy(entity);
+		}
+		if (!(timer->worldtype == WORLD_TIMER) && timer->is_valid) {
+			timedevent_destroy(timer);
 		}
 	}
 	// Iterate over the obstacle list and destroy each obstacle
@@ -1057,6 +1119,7 @@ void summon_world(float spawn_rate) {
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
+	log("New stage %i", current_stage_level);
 	if (current_stage_level < 10) {
 		float r = 0.0f;
 		float g = (float)current_stage_level / 20.0f;
@@ -1144,6 +1207,31 @@ void apply_debuff_effects(Player* player) {
     }
 }
 
+void draw_beam(Entity* entity, float delta_t) {
+	if (timer_finished(entity->timer, delta_t)) {
+		if (entity->child == NULL) {
+			Entity* beam = entity_create();
+			setup_beam(entity, beam);
+			entity->child = beam;
+		}
+		else
+		{
+			float duration_progress = entity->timer->duration_timer / entity->timer->duration;
+			entity->child->size.x = 0.5 * entity->size.x * sin(PI32*duration_progress);
+		}
+	} else {
+		if (entity->child != NULL) {
+			entity_destroy(entity->child);
+			entity->child = NULL;
+		}
+	}
+
+	if (entity->child != NULL) {
+		Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
+		draw_rect(draw_position, entity->child->size, entity->child->color);
+	}
+}
+
 void update_player_debuffs(Player* player, float delta_t) {
     for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
         if (player->player_debuffs[i].is_active) {
@@ -1161,19 +1249,6 @@ void update_player_debuffs(Player* player, float delta_t) {
     }
 }
 
-TimedEvent* initialize_color_switch_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
-
-	te->type = EVENT_COLOR_SWITCH;
-	te->interval = 4.0f;
-	te->interval_timer = 0.0f;
-	te->duration = 4.0f;
-	te->progress = 0.0f;
-	te->counter = 0;
-
-	return te;
-}
-
 int entry(int argc, char **argv) {
 	window.title = STR("Noel & Gustav - Pong Clone");
 	window.point_width = 600;
@@ -1181,7 +1256,7 @@ int entry(int argc, char **argv) {
 	window.x = 200;
 	window.y = 200;
 	window.clear_color = COLOR_BLACK; // Background color
-	window.fullscreen = true;
+	//window.fullscreen = true;
 
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
@@ -1225,7 +1300,7 @@ int entry(int argc, char **argv) {
 	world->world_background = COLOR_BLACK;
 
 	// -----------------------------------------------------------------------
-	// TIMED EVENTS ARE MADE HERE
+	//                      WORLD TIMED EVENTS ARE MADE HERE
 	// -----------------------------------------------------------------------
 	TimedEvent* color_switch_event = initialize_color_switch_event(world);
 	
@@ -1234,6 +1309,7 @@ int entry(int argc, char **argv) {
 
 		// Time stuff
 		float64 now = os_get_elapsed_seconds();
+		
 		float64 delta_t = now - last_time;
 		last_time = now;
 
@@ -1438,8 +1514,16 @@ int entry(int argc, char **argv) {
 				}
 			}
 			
-			{ // Draw The Entity
-				float64 t = os_get_elapsed_seconds(); 
+			if (entity->obstacle_type == BEAM_OBSTACLE) {
+				draw_beam(entity, delta_t);
+				if (entity->child != NULL) { // We have a beam
+					if (rect_rect_collision(entity->child, player->entity)) {
+						handle_beam_collision(entity->child, player->entity);
+					}
+				}
+			}
+
+			{ // Draw The Entity 
 				// TODO: Timer keeps on going after game is paused
 				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
 				{
@@ -1447,9 +1531,9 @@ int entry(int argc, char **argv) {
 					{
 						if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
 							float random_position_power_up = get_random_int_in_range(-PLAYABLE_WIDTH, PLAYABLE_WIDTH);
-							entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(t + random_position_power_up), -100);
+							entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(now + random_position_power_up), -100);
 						}
-						float a = 0.2 * sin(7*t) + 0.8;
+						float a = 0.2 * sin(7*now) + 0.8;
 						Vector4 col = entity->color;
 						entity->color = v4(col.x, col.y, col.z, a);
 					}
@@ -1478,30 +1562,13 @@ int entry(int argc, char **argv) {
 							} break;
 							case(BEAM_OBSTACLE): {
 								entity->color = v4(0, 1, 0, 0.3);
-								if (entity->drop_interval >= entity->drop_interval_timer) {
-									if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
-
-										float beam_time_left = entity->drop_interval - entity->drop_interval_timer; // När strålen aktiveras
-
-										if (beam_time_left < entity->drop_duration_time) {
-											Vector2 beam_start = entity->position; // Den övre punkten av strålen
-											Vector2 beam_size = v2(5, -window.height); // Rektangeln kommer att vara 10 enheter bred och 500 enheter hög
-											Vector2 adjusted_position_x = v2_sub(beam_start, v2(beam_size.x * 0.5f, 0));
-											Vector2 adjusted_position_y_and_x = v2_sub(adjusted_position_x, v2(0, 10));
-									draw_rect(adjusted_position_y_and_x, beam_size, v4(1, 0, 0, 0.7)); // Röd, halvgenomskinlig stråle
-								}
-								} else {
-									// Återställ timern och intervallen
-									entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
-									entity->drop_interval_timer = 0.0f;
-								}
 							} break;
 							case(HARD_OBSTACLE):
-								float r = 0.5 * sin(t + 3*PI32) + 0.5;
+								float r = 0.5 * sin(now + 3*PI32) + 0.5;
 								entity->color = v4(r, 0, 1, 1);
 								break;
 							case(BLOCK_OBSTACLE):
-								float a = 0.3 * sin(2*t) + 0.7;
+								float a = 0.3 * sin(2*now) + 0.7;
 								entity->color = v4(0.2, 0.2, 0.2, a);
 								break;
 							case(POWERUP_OBSTACLE):
@@ -1601,8 +1668,8 @@ int entry(int argc, char **argv) {
 				// Displaying information for each valid TimedEvent
 				draw_text(font_light, 
 					sprint(get_temporary_allocator(), 
-						STR("TimedEvent %d - Type: %d, Interval: %.2f, Timer: %.2f, Duration: %.2f, Progress: %.2f, Counter: %d"), 
-						i, te->type, te->interval, te->interval_timer, te->duration, te->progress, te->counter),
+						STR("TimedEvent %d - Type: %d, Interval: %.2f, I-timer: %.2f, Duration: %.2f, D-timer: %.2f, Progress: %.2f, Counter: %d"), 
+						i, te->type, te->interval, te->interval_timer, te->duration, te->duration_timer, te->progress, te->counter),
 					font_height, 
 					v2(-window.width / 2, window.height / 2 - 175 - (i * 25)),  // Adjust y-position for each TimedEvent
 					v2(0.4, 0.4), 
