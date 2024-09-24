@@ -130,6 +130,8 @@ typedef struct Player{
 	float damp_bounce;
 	Debuff player_debuffs[MAX_DEBUFF_COUNT];
 	PowerUp player_powerups[MAX_POWERUP_COUNT];
+	float immunity_timer;
+    bool is_immune;
 } Player;
 
 typedef struct Boss {
@@ -425,6 +427,8 @@ Player* create_player() {
 	Player* player = 0;
 	player = alloc(get_heap_allocator(), sizeof(Player));
 	memset(player, 0, sizeof(Player));
+	player->immunity_timer = 0.0f; // Ingen immunitet vid skapandet
+	player->is_immune = false; // Spelaren är inte immun
 
     // Initialize the Entity part of the Player
     player->entity = entity_create();
@@ -660,6 +664,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->drop_duration_time = get_random_float32_in_range(3.0f, 5.0f);
 		entity->drop_interval_timer = 0;
 	} 
+
 	// Check for Hard Obstacle (next 20% chance, i.e., 0.2 < random_value <= 0.4)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE) 
 	{
@@ -682,6 +687,13 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->health = 1;
 		entity->size = v2(28, 28);
 	}
+	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE + SPAWN_RATE_POWERUP_OBSTACLE) {
+        entity->obstacle_type = BEAM_OBSTACLE;
+        entity->health = 1;  // Strålen kan inte förstöras
+        entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
+        entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
+        entity->drop_interval_timer = 0.0f;
+    }
 	else 
 	{
 		entity->obstacle_type = BASE_OBSTACLE;
@@ -815,6 +827,28 @@ bool circle_circle_collision(Entity* circle1, Entity* circle2) {
     // Compare squared distance to squared radii sum (to avoid unnecessary sqrt calculation)
     return dist_squared <= radius_sum * radius_sum;
 }
+
+bool rect_rect_collision(Entity* rect1, Entity* rect2) {
+    // Beräkna gränserna för båda rektanglarna
+    float rect1_left = rect1->position.x - rect1->size.x / 2.0f;
+    float rect1_right = rect1->position.x + rect1->size.x / 2.0f;
+    float rect1_top = rect1->position.y - rect1->size.y / 2.0f;
+    float rect1_bottom = rect1->position.y + rect1->size.y / 2.0f;
+
+    float rect2_left = rect2->position.x - rect2->size.x / 2.0f;
+    float rect2_right = rect2->position.x + rect2->size.x / 2.0f;
+    float rect2_top = rect2->position.y - rect2->size.y / 2.0f;
+    float rect2_bottom = rect2->position.y + rect2->size.y / 2.0f;
+
+    // Kontrollera om rektanglarna överlappar
+    if (rect1_left > rect2_right || rect1_right < rect2_left ||
+        rect1_top > rect2_bottom || rect1_bottom < rect2_top) {
+        return false; // Ingen överlappning
+    }
+    
+    return true; // Överlappning
+}
+
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
@@ -1090,6 +1124,31 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	clean_world();
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 }
+
+void check_beam_collision(Player* player, Entity* beam) {
+    if (player->entity->is_valid && beam->is_valid) { // Kontrollera giltighet
+        // Använd rektangel-rektangel kollisionsdetektering
+        if (rect_rect_collision(player->entity, beam)) {
+            if (!player->is_immune) { // Kontrollera immunitet
+                player->entity->health -= 1; // Ta skada
+                player->is_immune = true; // Aktivera immunitet
+                player->immunity_timer = 1.0f; // Sätt immunitetens timer
+            }
+        }
+    }
+}
+
+
+void update_player_immunity(Player* player, float delta_t) {
+    if (player->is_immune) {
+        player->immunity_timer -= delta_t; // Minska immunitetstimer
+        if (player->immunity_timer <= 0.0f) {
+            player->is_immune = false; // Immunitetens tid är slut
+            player->immunity_timer = 0.0f; // Återställ timern
+        }
+    }
+}
+
 
 void apply_debuff_to_player(Player* player, DebuffType debuff_type, float duration) {
     for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
@@ -1418,6 +1477,26 @@ int entry(int argc, char **argv) {
 							case(DROP_OBSTACLE): {
 								entity->color = v4(1, 1, 1, 0.3);
 							} break;
+							case(BEAM_OBSTACLE): {
+								entity->color = v4(0, 1, 0, 0.3);
+								if (entity->drop_interval >= entity->drop_interval_timer) {
+									if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
+
+										float beam_time_left = entity->drop_interval - entity->drop_interval_timer; // När strålen aktiveras
+
+										if (beam_time_left < entity->drop_duration_time) {
+											Vector2 beam_start = entity->position; // Den övre punkten av strålen
+											Vector2 beam_size = v2(5, -window.height); // Rektangeln kommer att vara 10 enheter bred och 500 enheter hög
+											Vector2 adjusted_position_x = v2_sub(beam_start, v2(beam_size.x * 0.5f, 0));
+											Vector2 adjusted_position_y_and_x = v2_sub(adjusted_position_x, v2(0, 10));
+									draw_rect(adjusted_position_y_and_x, beam_size, v4(1, 0, 0, 0.7)); // Röd, halvgenomskinlig stråle
+								}
+								} else {
+									// Återställ timern och intervallen
+									entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
+									entity->drop_interval_timer = 0.0f;
+								}
+							} break;
 							case(HARD_OBSTACLE):
 								float r = 0.5 * sin(t + 3*PI32) + 0.5;
 								entity->color = v4(r, 0, 1, 1);
@@ -1457,6 +1536,7 @@ int entry(int argc, char **argv) {
 								}
 							}
 						}
+
 						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
 							if (!(is_game_paused)) entity->wave_time -= delta_t;
 
