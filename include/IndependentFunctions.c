@@ -1,3 +1,6 @@
+#define m4_identity m4_make_scale(v3(1, 1, 1))
+#define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
+
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
 }

@@ -1,15 +1,19 @@
 // -----------------------------------------------------------------------
-// IMPORTS LOCAL FILES ONLY
+//                      IMPORTS LOCAL FILES ONLY
 // -----------------------------------------------------------------------
 #include "include/GlobalVariables.c"
-#include "include/config.c"
+#include "include/IndependentFunctions.c"
+#include "include/ExtraDrawFunctions.c"
 #include "include/easings.c"
 #include "include/Types.c"
 #include "include/Structs.c"
 #include "include/particlesystem.c"
-#include "include/IndependentFunctions.c"
 
-// TODO: try to remove the need for global variables
+// -----------------------------------------------------------------------
+//                      Variable Global Variables
+//            (means that they can change value during runtime,
+//            if static variable use GlobalVariables.c instead)
+// -----------------------------------------------------------------------
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
@@ -26,186 +30,26 @@ bool mercy_top;
 bool debug_mode = false;
 bool game_over = false;
 bool is_power_up_active = false;
+
+//
+// ---- Menu Booleans ---- 
+//
+
 bool is_main_menu_active = false;
 bool is_settings_menu_active = false;
 bool is_game_paused = false;
-Vector2 mouse_position;
-float64 delta_t;
 
-#define m4_identity m4_make_scale(v3(1, 1, 1))
-#define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
-#define DETAIL_TYPE_ROUNDED_CORNERS 1
-#define DETAIL_TYPE_OUTLINED 2
-#define DETAIL_TYPE_OUTLINED_CIRCLE 3
+//
+// ---- Initialize Important Variables ---- 
+//
 
-// With custom shading we can extend the rendering library!
-Draw_Quad *draw_rounded_rect(Vector2 p, Vector2 size, Vector4 color, float radius);
-Draw_Quad *draw_rounded_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float radius);
-Draw_Quad *draw_outlined_rect(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels);
-Draw_Quad *draw_outlined_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels);
-Draw_Quad *draw_outlined_circle(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels);
-Draw_Quad *draw_outlined_circle_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels);
+Vector2 mouse_position; // the current mouse position
+float64 delta_t; // The difference in time between frames
+World* world = 0; // Create an empty world to use for functions below
 
-Vector2 MOUSE_POSITION() {
-	float mouseX = input_frame.mouse_x;
-	float mouseY = input_frame.mouse_y;
-	Matrix4 proj = draw_frame.projection;
-	Matrix4 view = draw_frame.camera_xform;
-	float window_w = window.width;
-	float window_h = window.height;
-
-	float ndc_x = (mouseX / (window_w * 0.5f)) - 1.0f;
-	float ndc_y = (mouseY / (window_h * 0.5f)) - 1.0f;
-
-	// Transform to world coordinates
-	Vector4 world_pos = v4(ndc_x, ndc_y, 0, 1);
-	world_pos = m4_transform(m4_inverse(proj), world_pos);
-	world_pos = m4_transform(view, world_pos);
-	return (Vector2){world_pos.x, world_pos.y};
-}
-
-World* world = 0;
-
-Vector2 world_to_screen(Vector2 p) {
-    Vector4 in_cam_space  = m4_transform(draw_frame.camera_xform, v4(p.x, p.y, 0.0, 1.0));
-    Vector4 in_clip_space = m4_transform(draw_frame.projection, in_cam_space);
-    
-    Vector4 ndc = {
-        .x = in_clip_space.x / in_clip_space.w,
-        .y = in_clip_space.y / in_clip_space.w,
-        .z = in_clip_space.z / in_clip_space.w,
-        .w = in_clip_space.w
-    };
-    
-    return v2(
-        (ndc.x + 1.0f) * 0.5f * (f32)window.width,
-        (ndc.y + 1.0f) * 0.5f * (f32)window.height
-    );
-}
-Vector2 world_size_to_screen_size(Vector2 s) {
-    Vector2 origin = v2(0, 0);
-    
-    Vector2 screen_origin = world_to_screen(origin);
-    Vector2 screen_size_point = world_to_screen(s);
-    
-    return v2(
-        screen_size_point.x - screen_origin.x,
-        screen_size_point.y - screen_origin.y
-    );
-}
-
-Draw_Quad *draw_rounded_rect(Vector2 p, Vector2 size, Vector4 color, float radius) {
-	Draw_Quad *q = draw_rect(p, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_ROUNDED_CORNERS;
-	// corner_radius
-	q->userdata[0].y = radius;
-	return q;
-}
-Draw_Quad *draw_rounded_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float radius) {
-	Draw_Quad *q = draw_rect_xform(xform, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_ROUNDED_CORNERS;
-	// corner_radius
-	q->userdata[0].y = radius;
-	return q;
-}
-Draw_Quad *draw_outlined_rect(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels) {
-	Draw_Quad *q = draw_rect(p, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_OUTLINED;
-	// line_width_pixels
-	q->userdata[0].y = line_width_pixels;
-	// rect_size
-	q->userdata[0].zw = world_size_to_screen_size(size);
-	return q;
-}
-Draw_Quad *draw_outlined_rect_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels) {
-	Draw_Quad *q = draw_rect_xform(xform, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_OUTLINED;
-	// line_width_pixels
-	q->userdata[0].y = line_width_pixels;
-	// rect_size
-	q->userdata[0].zw = world_size_to_screen_size(size);
-	return q;
-}
-Draw_Quad *draw_outlined_circle(Vector2 p, Vector2 size, Vector4 color, float line_width_pixels) {
-	Draw_Quad *q = draw_rect(p, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_OUTLINED_CIRCLE;
-	// line_width_pixels
-	q->userdata[0].y = line_width_pixels;
-	// rect_size_pixels
-	q->userdata[0].zw = world_size_to_screen_size(size); // Transform world space to screen space
-	return q;
-}
-Draw_Quad *draw_outlined_circle_xform(Matrix4 xform, Vector2 size, Vector4 color, float line_width_pixels) {
-	Draw_Quad *q = draw_rect_xform(xform, size, color);
-	// detail_type
-	q->userdata[0].x = DETAIL_TYPE_OUTLINED_CIRCLE;
-	// line_width_pixels
-	q->userdata[0].y = line_width_pixels;
-	// rect_size_pixels
-	q->userdata[0].zw = world_size_to_screen_size(size); // Transform world space to screen space
-	
-	return q;
-}
-
-void update_timed_event(TimedEvent* event, float delta_t, void (*on_event)(void), int* is_game_paused) {
-    if (!(*is_game_paused)) {
-        event->interval_timer += delta_t;
-    }
-
-    if (event->interval_timer >= event->interval) {
-        float time_left = event->duration - event->progress;
-        
-        if (time_left > 0) {
-            event->progress += delta_t;
-            float progress_ratio = (event->duration - time_left) / event->duration;
-            on_event();  // Call the event action function
-
-            // Optional: You can also add logic for drawing or updating visuals here
-        } else {
-            // Reset for next interval if the duration has completed
-            event->interval = get_random_float32_in_range(15.0f, 30.0f); // Set next interval
-            event->interval_timer = 0.0f; // Reset timer
-            event->progress = 0.0f; // Reset progress
-        }
-    }
-}
-
-// Function to check clearance below a tile
-bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
-    // Ensure the y+1 is within the matrix bounds
-    if (y == 0) {
-        return true; 
-    }
-
-    // Iterate through all rows below (x, y), i.e., (x, y-1) down to (x, 0)
-    for (int i = y - 1; i >= 0; i--) {
-        int found = 0;  // Flag to check if there's a tile at (x, i)
-        
-        // Check if there's an obstacle at (x, i)
-        for (int j = 0; j < obstacle_count; j++) {
-            if (obstacle_list[j].x == x && obstacle_list[j].y == i) {
-                found = 1;  // We found a tile at (x, i)
-                
-                // If the obstacle is not clear (i.e., not NULL), return 0
-                if (obstacle_list[j].obstacle != NULL && obstacle_list[j].obstacle->obstacle_type != NIL_OBSTACLE) {
-                    return false;  // If the obstacle is not destroyed, return 0
-                }
-                break;  // Break the inner loop once we've found the tile
-            }
-        }
-        
-        // If no obstacle was found at (x, i), it means the tile is clear, so continue checking
-    }
-
-    // If we made it through the loop, all tiles below are clear
-    return true;
-}
-
+// -----------------------------------------------------------------------
+//                  CREATE FUNCTIONS FOR ARRAY LOOKUP
+// -----------------------------------------------------------------------
 Entity* entity_create() {
 	Entity* entity_found = 0;
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -219,6 +63,11 @@ Entity* entity_create() {
 	entity_found->is_valid = true;
 	return entity_found;
 }
+
+void entity_destroy(Entity* entity) {
+	memset(entity, 0, sizeof(Entity));
+}
+
 TimedEvent* timedevent_create(World* world) {
 	TimedEvent* timedevent_found = 0;
 	timedevent_found = alloc(get_heap_allocator(), sizeof(TimedEvent));
@@ -239,9 +88,83 @@ void timedevent_destroy(TimedEvent* timedevent) {
 	memset(timedevent, 0, sizeof(TimedEvent));
 }
 
-void entity_destroy(Entity* entity) {
-	memset(entity, 0, sizeof(Entity));
+// TODO:
+// Convert powerup and debuff to the same system as the ones above
+//                            To create:
+// PowerUp* powerup_create()
+// void poweruo_destroy()
+// Debuff* debuff_create()
+// void debuff_destroy() 
+
+// -----------------------------------------------------------------------
+//                         TIMER FUNCTIONS
+// -----------------------------------------------------------------------
+
+bool timer_finished(TimedEvent* timed_event, float delta_t) {
+    // Update the timer with the elapsed time
+    if (!is_game_paused) timed_event->interval_timer += delta_t;
+
+	// Progress calculation
+	timed_event->progress = timed_event->interval_timer / timed_event->interval;
+
+	// Ensure progress is clamped between 0 and 1
+	timed_event->progress = fminf(fmaxf(timed_event->progress, 0.0f), 1.0f);
+
+	// Check if the timer has exceeded the switch interval
+	if (timed_event->interval_timer >= timed_event->interval) {
+
+		if (timed_event->duration_timer < timed_event->duration)
+		{
+			if (!is_game_paused) timed_event->duration_timer += delta_t;
+			return true;
+		}
+		else if (timed_event->duration_timer > timed_event->duration)
+		{
+			timed_event->duration_timer = 0;
+		}
+		
+		timed_event->interval_timer -= timed_event->interval; // Reset the timer
+		timed_event->counter++;
+		return true;
+	}
+	else if (timed_event->interval_timer >= timed_event->interval) {
+		return true;
+	}
+
+	return false;
 }
+
+TimedEvent* initialize_color_switch_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = EVENT_COLOR_SWITCH;
+	te->worldtype = WORLD_TIMER;
+	te->interval = 4.0f;
+	te->interval_timer = 0.0f;
+	te->duration = 0.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
+TimedEvent* initialize_beam_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = BEAM_EVENT;
+	te->worldtype = ENTITY_TIMER;
+	te->interval = 15.0f;
+	te->interval_timer = get_random_float32_in_range(0, te->interval);
+	te->duration = 1.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
+// -----------------------------------------------------------------------
+//                          PARTICLE FUNCTIONS
+// -----------------------------------------------------------------------
 
 void particle_update(float64 delta_t) {
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
@@ -340,6 +263,10 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 	}
 }
 
+// -----------------------------------------------------------------------
+//               SUMMON / SETUP / INITIALIZE FUNCTIONS
+// -----------------------------------------------------------------------
+
 Entity* setup_player_entity(Entity* entity) {
 	entity->entitytype = PLAYER_ENTITY;
 
@@ -350,7 +277,6 @@ Entity* setup_player_entity(Entity* entity) {
 	return entity;
 }
 
-// Initialize the player
 Player* create_player() {
     // Allocate memory for the Player object
 	Player* player = 0;
@@ -389,145 +315,6 @@ Boss* create_boss() {
 	boss->entity->size = v2(50, 50);
 
 	return boss;
-}
-
-void update_player_position(Player* player, float delta_t) {
-    Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
-    bool moving = false;
-    static int previous_input = -1;  // -1: ingen riktning, 0: vänster, 1: höger
-
-    // Kontrollera om vänster knapp trycks ned
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
-        input_axis.x -= 1.0f;
-        moving = true;
-
-        // Om tidigare input var höger, decelerera först innan vi byter riktning
-        if (previous_input == 1 && player->entity->velocity.x > 0) {
-            player->entity->velocity.x -= player->entity->deceleration.x * delta_t;
-            if (player->entity->velocity.x < 0) player->entity->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
-            return;  // Vänta tills vi bromsat in helt
-        }
-        previous_input = 0;  // Uppdatera riktningen till vänster
-    }
-
-    // Kontrollera om höger knapp trycks ned
-    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
-        input_axis.x += 1.0f;
-        moving = true;
-
-        // Om tidigare input var vänster, decelerera först innan vi byter riktning
-        if (previous_input == 0 && player->entity->velocity.x < 0) {
-            player->entity->velocity.x += player->entity->deceleration.x * delta_t;
-            if (player->entity->velocity.x > 0) player->entity->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
-            return;  // Vänta tills vi bromsat in helt
-        }
-        previous_input = 1;  // Uppdatera riktningen till höger
-    }
-
-    // Om både vänster och höger trycks ned samtidigt
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && (is_key_down('D') || is_key_down(KEY_ARROW_RIGHT))) {
-        input_axis.x = 0;  // Om båda trycks, sluta röra dig
-        moving = false;
-        previous_input = -1;  // Ingen aktiv rörelse
-    }
-
-    // Normalisera input_axis för att säkerställa korrekt riktning
-    input_axis = v2_normalize(input_axis);
-
-    // Acceleration
-    if (moving) {
-        // Om vi rör oss, accelerera
-        player->entity->velocity = v2_add(player->entity->velocity, v2_mulf(input_axis, player->entity->acceleration.x * delta_t));
-
-        // Begränsa hastigheten till maxhastigheten
-        if (v2_length(player->entity->velocity) > player->max_speed) {
-            player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed);
-        }
-    } else {
-        // Deceleration om ingen knapp trycks ned
-        if (v2_length(player->entity->velocity) > player->min_speed) {
-            Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
-            player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
-
-            // Om hastigheten närmar sig 0, stoppa helt
-            if (v2_length(player->entity->velocity) < player->min_speed) {
-                player->entity->velocity = v2(0, 0);
-            }
-        }
-    }
-}
-
-void limit_player_position(Player* player, float delta_t){
-    // Begränsa spelarens position inom spelområdet
-    if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
-        player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;
-
-        // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(player->entity->velocity.x) > player->max_bounce) {
-            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
-        } else {
-            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
-        }
-    }
-
-    if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
-        player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;
-
-        // Om hastigheten är tillräckligt hög, studsa tillbaka
-        if (fabs(player->entity->velocity.x) > player->max_bounce) {
-            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
-        } else {
-            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
-        }
-    }
-}
-
-void play_random_blop_sound() {
-    // Slumpa ett tal mellan 0 och 3
-    int random_sound = rand() % 4;
-
-    switch (random_sound) {
-        case 0:
-			play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
-            break;
-        case 1:
-            play_one_audio_clip(STR("res/sound_effects/blop2.wav"));
-            break;
-        case 2:
-            play_one_audio_clip(STR("res/sound_effects/blop3.wav"));
-            break;
-        case 3:
-            play_one_audio_clip(STR("res/sound_effects/blop4.wav"));
-            break;
-    }
-}
-
-TimedEvent* initialize_color_switch_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
-
-	te->type = EVENT_COLOR_SWITCH;
-	te->worldtype = WORLD_TIMER;
-	te->interval = 4.0f;
-	te->interval_timer = 0.0f;
-	te->duration = 0.0f;
-	te->progress = 0.0f;
-	te->counter = 0;
-
-	return te;
-}
-
-TimedEvent* initialize_beam_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
-
-	te->type = BEAM_EVENT;
-	te->worldtype = ENTITY_TIMER;
-	te->interval = 15.0f;
-	te->interval_timer = get_random_float32_in_range(0, te->interval);
-	te->duration = 1.0f;
-	te->progress = 0.0f;
-	te->counter = 0;
-
-	return te;
 }
 
 void summon_projectile_player(Entity* entity, Player* player) {
@@ -676,6 +463,94 @@ void setup_beam(Entity* beam_obstacle, Entity* beam) {
 	beam->position = v2(beam_obstacle->position.x, beam_y_position);
 }
 
+// void summon_world() needs the be furthers down since it might use 
+// some of the functions above when summoning the world.
+void summon_world(float spawn_rate) {
+	for (int x = 0; x < GRID_WIDTH; x++) { // x
+		for (int y = 0; y < GRID_HEIGHT; y++) { // y
+			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
+				Entity* entity = entity_create();
+				setup_obstacle(entity, x, y);
+			}
+		}
+	}
+}
+
+// -----------------------------------------------------------------------
+//                     UNCATEGORIZED FUNCTIONS
+// -----------------------------------------------------------------------
+
+Vector2 MOUSE_POSITION() {
+	float mouseX = input_frame.mouse_x;
+	float mouseY = input_frame.mouse_y;
+	Matrix4 proj = draw_frame.projection;
+	Matrix4 view = draw_frame.camera_xform;
+	float window_w = window.width;
+	float window_h = window.height;
+
+	float ndc_x = (mouseX / (window_w * 0.5f)) - 1.0f;
+	float ndc_y = (mouseY / (window_h * 0.5f)) - 1.0f;
+
+	// Transform to world coordinates
+	Vector4 world_pos = v4(ndc_x, ndc_y, 0, 1);
+	world_pos = m4_transform(m4_inverse(proj), world_pos);
+	world_pos = m4_transform(view, world_pos);
+	return (Vector2){world_pos.x, world_pos.y};
+}
+
+// Function to check clearance below a tile
+bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, int x, int y) {
+    // Ensure the y+1 is within the matrix bounds
+    if (y == 0) {
+        return true; 
+    }
+
+    // Iterate through all rows below (x, y), i.e., (x, y-1) down to (x, 0)
+    for (int i = y - 1; i >= 0; i--) {
+        int found = 0;  // Flag to check if there's a tile at (x, i)
+        
+        // Check if there's an obstacle at (x, i)
+        for (int j = 0; j < obstacle_count; j++) {
+            if (obstacle_list[j].x == x && obstacle_list[j].y == i) {
+                found = 1;  // We found a tile at (x, i)
+                
+                // If the obstacle is not clear (i.e., not NULL), return 0
+                if (obstacle_list[j].obstacle != NULL && obstacle_list[j].obstacle->obstacle_type != NIL_OBSTACLE) {
+                    return false;  // If the obstacle is not destroyed, return 0
+                }
+                break;  // Break the inner loop once we've found the tile
+            }
+        }
+        
+        // If no obstacle was found at (x, i), it means the tile is clear, so continue checking
+    }
+
+    // If we made it through the loop, all tiles below are clear
+    return true;
+}
+
+void clean_world() {
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		TimedEvent* timer = &world->timedevents[i];
+		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
+			entity_destroy(entity);
+		}
+		if (!(timer->worldtype == WORLD_TIMER) && timer->is_valid) {
+			timedevent_destroy(timer);
+		}
+	}
+	// Iterate over the obstacle list and destroy each obstacle
+    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+        if (world->obstacle_list[i].obstacle != NULL) {
+            entity_destroy(world->obstacle_list[i].obstacle);  // Destroy the obstacle
+            world->obstacle_list[i].obstacle = NULL;           // Nullify the reference
+        }
+    }
+	obstacle_count = 0;
+	number_of_block_obstacles = 0;
+}
+
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
 	if (projectile->n_bounces >= projectile->max_bounces) {
@@ -767,6 +642,30 @@ void apply_damage(Entity* entity, float damage) {
 	}
 }
 
+void play_random_blop_sound() {
+    // Slumpa ett tal mellan 0 och 3
+    int random_sound = rand() % 4;
+
+    switch (random_sound) {
+        case 0:
+			play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
+            break;
+        case 1:
+            play_one_audio_clip(STR("res/sound_effects/blop2.wav"));
+            break;
+        case 2:
+            play_one_audio_clip(STR("res/sound_effects/blop3.wav"));
+            break;
+        case 3:
+            play_one_audio_clip(STR("res/sound_effects/blop4.wav"));
+            break;
+    }
+}
+
+// -----------------------------------------------------------------------
+//                      COLLISION ALGORITHMS
+// -----------------------------------------------------------------------
+
 bool circle_rect_collision(Entity* circle, Entity* rect) {
 	Vector2 distance = v2_sub(circle->position, rect->position);
 	float dist_x = fabsf(distance.x);
@@ -816,6 +715,10 @@ bool rect_rect_collision(Entity* rect1, Entity* rect2) {
     return true; // Överlappning
 }
 
+// -----------------------------------------------------------------------
+//                   HANDLE COLLISION FUNCTIONS
+// -----------------------------------------------------------------------
+
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
@@ -838,7 +741,13 @@ void handle_beam_collision(Entity* beam, Entity* player) {
 	number_of_shots_missed++;
 }
 
+// -----------------------------------------------------------------------
+//                        POWERUP FUNCTIONS
+// -----------------------------------------------------------------------
 
+// TODO: Det här kommer inte funka. Varje powerup behöver en egen timer. Här delar
+// alla powerups samma timer, så om du hinner få en powerup innan timern börjar om
+// så tappar du inte din powerup!
 
 void apply_power_up(Entity* power_up, Player* player) {
 	switch(power_up->power_up_type) 
@@ -875,9 +784,6 @@ void apply_power_up(Entity* power_up, Player* player) {
 	}
 }
 
-// TODO: Det här kommer inte funka. Varje powerup behöver en egen timer. Här delar
-// alla powerups samma timer, så om du hinner få en powerup innan timern börjar om
-// så tappar du inte din powerup!
 void update_power_up_timer(Player* player, float delta_t) {
     // Kontrollera om power-upen är aktiv
     if (is_power_up_active) {
@@ -898,40 +804,195 @@ void update_power_up_timer(Player* player, float delta_t) {
     }
 }
 
-bool timer_finished(TimedEvent* timed_event, float delta_t) {
-    // Update the timer with the elapsed time
-    if (!is_game_paused) timed_event->interval_timer += delta_t;
+// -----------------------------------------------------------------------
+//                         PLAYER FUNCTIONS
+// -----------------------------------------------------------------------
 
-	// Progress calculation
-	timed_event->progress = timed_event->interval_timer / timed_event->interval;
+void update_player_debuffs(Player* player, float delta_t) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (player->player_debuffs[i].is_active) {
+            // Endast öka tid om det inte är en permanent debuff
+            if (player->player_debuffs[i].duration > 0) {
+                player->player_debuffs[i].elapsed_time += delta_t;
 
-	// Ensure progress is clamped between 0 and 1
-	timed_event->progress = fminf(fmaxf(timed_event->progress, 0.0f), 1.0f);
-
-	// Check if the timer has exceeded the switch interval
-	if (timed_event->interval_timer >= timed_event->interval) {
-
-		if (timed_event->duration_timer < timed_event->duration)
-		{
-			if (!is_game_paused) timed_event->duration_timer += delta_t;
-			return true;
-		}
-		else if (timed_event->duration_timer > timed_event->duration)
-		{
-			timed_event->duration_timer = 0;
-		}
-		
-		timed_event->interval_timer -= timed_event->interval; // Reset the timer
-		timed_event->counter++;
-		return true;
-	}
-	else if (timed_event->interval_timer >= timed_event->interval) {
-		return true;
-	}
-
-	return false;
+                // Kolla om debuffens tid är slut
+                if (player->player_debuffs[i].elapsed_time >= player->player_debuffs[i].duration) {
+                    player->player_debuffs[i].is_active = false;  // Inaktivera debuffen
+                    player->player_debuffs[i].debuff_type = NIL_DEBUFF;  // Ingen debuff
+                }
+            }
+        }
+    }
 }
 
+void update_player_immunity(Player* player, float delta_t) {
+    if (player->is_immune) {
+        player->immunity_timer -= delta_t; // Minska immunitetstimer
+        if (player->immunity_timer <= 0.0f) {
+            player->is_immune = false; // Immunitetens tid är slut
+            player->immunity_timer = 0.0f; // Återställ timern
+        }
+    }
+}
+
+void apply_debuff_to_player(Player* player, DebuffType debuff_type, float duration) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (!player->player_debuffs[i].is_active) {
+            player->player_debuffs[i].debuff_type = debuff_type;
+            player->player_debuffs[i].is_active = true;
+            player->player_debuffs[i].duration = duration;
+            player->player_debuffs[i].elapsed_time = 0.0f;
+            break;
+        }
+    }
+}
+
+void apply_debuff_effects(Player* player) {
+    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
+        if (player->player_debuffs[i].is_active) {
+            switch (player->player_debuffs[i].debuff_type) {
+                case DEBUFF_SLOW_PLAYER:
+                    player->max_speed *= 0.5f;  // Halvera spelarens hastighet om slow-debuffen är aktiv
+                    break;
+				
+				case DEBUFF_SLOW_PROJECTILE: //Projectile är inte med i struct player...
+                    break;
+
+                case DEBUFF_WEAKNESS: //Tänkte ha att man skadar 50% av vad man tidigare gjorde men måste ändra health till float då
+                    break;
+
+                case NIL_DEBUFF:
+                default:
+                    break;
+            }
+        }
+    }
+}
+
+void update_player_position(Player* player, float delta_t) {
+    Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
+    bool moving = false;
+    static int previous_input = -1;  // -1: ingen riktning, 0: vänster, 1: höger
+
+    // Kontrollera om vänster knapp trycks ned
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
+        input_axis.x -= 1.0f;
+        moving = true;
+
+        // Om tidigare input var höger, decelerera först innan vi byter riktning
+        if (previous_input == 1 && player->entity->velocity.x > 0) {
+            player->entity->velocity.x -= player->entity->deceleration.x * delta_t;
+            if (player->entity->velocity.x < 0) player->entity->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
+            return;  // Vänta tills vi bromsat in helt
+        }
+        previous_input = 0;  // Uppdatera riktningen till vänster
+    }
+
+    // Kontrollera om höger knapp trycks ned
+    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
+        input_axis.x += 1.0f;
+        moving = true;
+
+        // Om tidigare input var vänster, decelerera först innan vi byter riktning
+        if (previous_input == 0 && player->entity->velocity.x < 0) {
+            player->entity->velocity.x += player->entity->deceleration.x * delta_t;
+            if (player->entity->velocity.x > 0) player->entity->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
+            return;  // Vänta tills vi bromsat in helt
+        }
+        previous_input = 1;  // Uppdatera riktningen till höger
+    }
+
+    // Om både vänster och höger trycks ned samtidigt
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && (is_key_down('D') || is_key_down(KEY_ARROW_RIGHT))) {
+        input_axis.x = 0;  // Om båda trycks, sluta röra dig
+        moving = false;
+        previous_input = -1;  // Ingen aktiv rörelse
+    }
+
+    // Normalisera input_axis för att säkerställa korrekt riktning
+    input_axis = v2_normalize(input_axis);
+
+    // Acceleration
+    if (moving) {
+        // Om vi rör oss, accelerera
+        player->entity->velocity = v2_add(player->entity->velocity, v2_mulf(input_axis, player->entity->acceleration.x * delta_t));
+
+        // Begränsa hastigheten till maxhastigheten
+        if (v2_length(player->entity->velocity) > player->max_speed) {
+            player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed);
+        }
+    } else {
+        // Deceleration om ingen knapp trycks ned
+        if (v2_length(player->entity->velocity) > player->min_speed) {
+            Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
+            player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
+
+            // Om hastigheten närmar sig 0, stoppa helt
+            if (v2_length(player->entity->velocity) < player->min_speed) {
+                player->entity->velocity = v2(0, 0);
+            }
+        }
+    }
+}
+
+void limit_player_position(Player* player, float delta_t){
+    // Begränsa spelarens position inom spelområdet
+    if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
+        player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;
+
+        // Om hastigheten är tillräckligt hög, studsa tillbaka
+        if (fabs(player->entity->velocity.x) > player->max_bounce) {
+            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
+        } else {
+            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+        }
+    }
+
+    if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
+        player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;
+
+        // Om hastigheten är tillräckligt hög, studsa tillbaka
+        if (fabs(player->entity->velocity.x) > player->max_bounce) {
+            player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
+        } else {
+            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+//                   DRAW FUNCTIONS FOR DRAW LOOP
+// -----------------------------------------------------------------------
+
+void draw_beam(Entity* entity, float delta_t) {
+	if (timer_finished(entity->timer, delta_t)) {
+		if (entity->child == NULL) {
+			Entity* beam = entity_create();
+			setup_beam(entity, beam);
+			entity->child = beam;
+		}
+		else
+		{
+			float duration_progress = entity->timer->duration_timer / entity->timer->duration;
+			entity->child->size.x = 0.5 * entity->size.x * sin(PI32*duration_progress);
+		}
+	} else {
+		if (entity->child != NULL) {
+			entity_destroy(entity->child);
+			entity->child = NULL;
+		}
+	}
+
+	if (entity->child != NULL) {
+		Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
+		draw_rect(draw_position, entity->child->size, entity->child->color);
+	}
+}
+
+void draw_playable_area_borders() {
+	draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
+	draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
+}
 
 void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 
@@ -1083,38 +1144,9 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	}
 }
 
-void clean_world() {
-	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-		Entity* entity = &world->entities[i];
-		TimedEvent* timer = &world->timedevents[i];
-		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
-			entity_destroy(entity);
-		}
-		if (!(timer->worldtype == WORLD_TIMER) && timer->is_valid) {
-			timedevent_destroy(timer);
-		}
-	}
-	// Iterate over the obstacle list and destroy each obstacle
-    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-        if (world->obstacle_list[i].obstacle != NULL) {
-            entity_destroy(world->obstacle_list[i].obstacle);  // Destroy the obstacle
-            world->obstacle_list[i].obstacle = NULL;           // Nullify the reference
-        }
-    }
-	obstacle_count = 0;
-	number_of_block_obstacles = 0;
-}
-
-void summon_world(float spawn_rate) {
-	for (int x = 0; x < GRID_WIDTH; x++) { // x
-		for (int y = 0; y < GRID_HEIGHT; y++) { // y
-			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
-				Entity* entity = entity_create();
-				setup_obstacle(entity, x, y);
-			}
-		}
-	}
-}
+// -----------------------------------------------------------------------
+//                      STAGE HANDLER FUNCTION
+// -----------------------------------------------------------------------
 
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
@@ -1146,107 +1178,6 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	
 	clean_world();
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
-}
-
-void check_beam_collision(Player* player, Entity* beam) {
-    if (player->entity->is_valid && beam->is_valid) { // Kontrollera giltighet
-        // Använd rektangel-rektangel kollisionsdetektering
-        if (rect_rect_collision(player->entity, beam)) {
-            if (!player->is_immune) { // Kontrollera immunitet
-                player->entity->health -= 1; // Ta skada
-                player->is_immune = true; // Aktivera immunitet
-                player->immunity_timer = 1.0f; // Sätt immunitetens timer
-            }
-        }
-    }
-}
-
-
-void update_player_immunity(Player* player, float delta_t) {
-    if (player->is_immune) {
-        player->immunity_timer -= delta_t; // Minska immunitetstimer
-        if (player->immunity_timer <= 0.0f) {
-            player->is_immune = false; // Immunitetens tid är slut
-            player->immunity_timer = 0.0f; // Återställ timern
-        }
-    }
-}
-
-
-void apply_debuff_to_player(Player* player, DebuffType debuff_type, float duration) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (!player->player_debuffs[i].is_active) {
-            player->player_debuffs[i].debuff_type = debuff_type;
-            player->player_debuffs[i].is_active = true;
-            player->player_debuffs[i].duration = duration;
-            player->player_debuffs[i].elapsed_time = 0.0f;
-            break;
-        }
-    }
-}
-
-void apply_debuff_effects(Player* player) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (player->player_debuffs[i].is_active) {
-            switch (player->player_debuffs[i].debuff_type) {
-                case DEBUFF_SLOW_PLAYER:
-                    player->max_speed *= 0.5f;  // Halvera spelarens hastighet om slow-debuffen är aktiv
-                    break;
-				
-				case DEBUFF_SLOW_PROJECTILE: //Projectile är inte med i struct player...
-                    break;
-
-                case DEBUFF_WEAKNESS: //Tänkte ha att man skadar 50% av vad man tidigare gjorde men måste ändra health till float då
-                    break;
-
-                case NIL_DEBUFF:
-                default:
-                    break;
-            }
-        }
-    }
-}
-
-void draw_beam(Entity* entity, float delta_t) {
-	if (timer_finished(entity->timer, delta_t)) {
-		if (entity->child == NULL) {
-			Entity* beam = entity_create();
-			setup_beam(entity, beam);
-			entity->child = beam;
-		}
-		else
-		{
-			float duration_progress = entity->timer->duration_timer / entity->timer->duration;
-			entity->child->size.x = 0.5 * entity->size.x * sin(PI32*duration_progress);
-		}
-	} else {
-		if (entity->child != NULL) {
-			entity_destroy(entity->child);
-			entity->child = NULL;
-		}
-	}
-
-	if (entity->child != NULL) {
-		Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
-		draw_rect(draw_position, entity->child->size, entity->child->color);
-	}
-}
-
-void update_player_debuffs(Player* player, float delta_t) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (player->player_debuffs[i].is_active) {
-            // Endast öka tid om det inte är en permanent debuff
-            if (player->player_debuffs[i].duration > 0) {
-                player->player_debuffs[i].elapsed_time += delta_t;
-
-                // Kolla om debuffens tid är slut
-                if (player->player_debuffs[i].elapsed_time >= player->player_debuffs[i].duration) {
-                    player->player_debuffs[i].is_active = false;  // Inaktivera debuffen
-                    player->player_debuffs[i].debuff_type = NIL_DEBUFF;  // Ingen debuff
-                }
-            }
-        }
-    }
 }
 
 int entry(int argc, char **argv) {
@@ -1711,13 +1642,13 @@ int entry(int argc, char **argv) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 		}
 
-
-		draw_line(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
-		draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
+		
+		draw_playable_area_borders();
 
 		draw_death_borders(color_switch_event, delta_t);
 
 		draw_settings_menu(font_light, font_bold);
+
 		draw_main_menu(font_light, font_bold);
 
 		os_update();
