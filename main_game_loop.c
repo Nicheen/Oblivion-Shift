@@ -965,6 +965,7 @@ void limit_player_position(Player* player, float delta_t){
 // -----------------------------------------------------------------------
 
 void draw_beam(Entity* entity, float delta_t) {
+	
 	if (timer_finished(entity->timer, delta_t)) {
 		if (entity->child == NULL) {
 			Entity* beam = entity_create();
@@ -982,11 +983,19 @@ void draw_beam(Entity* entity, float delta_t) {
 			entity->child = NULL;
 		}
 	}
+	   if (entity->child == NULL && entity->timer->interval_timer >= entity->timer->interval - 1.0f) {
 
+        float warning_progress = (entity->timer->interval - entity->timer->interval_timer) / 1.0f;
+        float warning_beam_size = (entity->size.x / 4.0f) * (1.0f - warning_progress);
+
+        Vector2 warning_position = v2_sub(entity->position, v2(warning_beam_size / 2, entity->size.y / 2));
+        Vector2 warning_beam_size_vec = v2(warning_beam_size, -window.height); 
+        draw_rect(warning_position, warning_beam_size_vec, v4(0, 1, 0, 0.5)); 
+    }
 	if (entity->child != NULL) {
-		Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
-		draw_rect(draw_position, entity->child->size, entity->child->color);
-	}
+        Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
+        draw_rect(draw_position, entity->child->size, v4(1, 0, 0, 0.7)); 
+    }
 }
 
 void draw_playable_area_borders() {
@@ -1621,7 +1630,7 @@ int entry(int argc, char **argv) {
 		game_over = number_of_shots_missed >= number_of_hearts;
 
 		if (game_over) {
-			play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
+			//play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
 			current_stage_level = 0;
 			number_of_shots_missed = 0;
 			clean_world();
