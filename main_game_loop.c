@@ -311,7 +311,7 @@ Boss* create_boss() {
 	boss->entity = entity_create();
 	boss->entity->entitytype = BOSS_ENTITY;
 	boss->entity->health = 10;
-	boss->entity->color = COLOR_YELLOW;
+	boss->entity->color = v4(1, 1, 0, 1);
 	boss->entity->size = v2(50, 50);
 
 	return boss;
@@ -365,7 +365,7 @@ void setup_power_up(Entity* entity) {
 	else if (random_value < 3/n_powerups)
 	{
 		entity->power_up_type = IMMORTAL_TOP_POWER_UP;
-		entity->color = COLOR_YELLOW;
+		entity->color = v4(1, 1, 0, 1);
 	} 
 	else if (random_value < 4/n_powerups)
 	{
