@@ -124,7 +124,7 @@ bool timer_finished(TimedEvent* timed_event, float delta_t) {
 		}
 		
 		timed_event->interval_timer -= timed_event->interval; // Reset the timer
-		timed_event->counter++;
+		if (!(timed_event->counter == -1)) { timed_event->counter++; }
 		return true;
 	}
 	else if (timed_event->interval_timer >= timed_event->interval) {
@@ -153,8 +153,8 @@ TimedEvent* initialize_beam_event(World* world) {
 
 	te->type = BEAM_EVENT;
 	te->worldtype = ENTITY_TIMER;
-	te->interval = 15.0f;
-	te->interval_timer = get_random_float32_in_range(0, te->interval);
+	te->interval = 10.0f;
+	te->interval_timer = get_random_float32_in_range(0, 0.7*te->interval);
 	te->duration = 1.0f;
 	te->progress = 0.0f;
 	te->counter = 0;
@@ -172,7 +172,22 @@ TimedEvent* initialize_boss_movement_event(World* world) {
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
     te->progress = 0.0f;
-    te->counter = 0;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_boss_attack_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+    te->type = BOSS_ATTACK_EVENT;
+    te->worldtype = ENTITY_TIMER;
+    te->interval = 2.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
 
     return te;
 }
@@ -180,6 +195,26 @@ TimedEvent* initialize_boss_movement_event(World* world) {
 // -----------------------------------------------------------------------
 //                          PARTICLE FUNCTIONS
 // -----------------------------------------------------------------------
+
+int number_of_certain_particle(ParticleKind kind) {
+	int n = 0;
+	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
+		Particle* p = &particles[i];
+		if (p->kind == kind) {
+			n++;
+		}
+	}
+	return n;
+}
+
+void remove_all_particle_type(ParticleKind kind) {
+	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
+		Particle* p = &particles[i];
+		if (p->kind == kind) {
+			particle_clear(p);
+		}
+	}
+}
 
 void particle_update(float64 delta_t) {
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
@@ -255,11 +290,12 @@ int particle_render() {
 	return number_of_particles;
 }
 
-void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
+void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kind) {
 	switch (kind) {
 		case BOUNCE_PFX: {
-			for (int i = 0; i < 4; i++) {
+			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
+				p->kind = BOUNCE_PFX;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
 				p->pos = pos;
 				p->col = color;
@@ -271,8 +307,9 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 			}
 		} break;
 		case POWERUP_PFX: {
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
+				p->kind = POWERUP_PFX;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity | PARTICLE_FLAGS_gravity;
 				p->pos = v2(pos.x + get_random_int_in_range(-10, 10), pos.y + get_random_int_in_range(-10, 10));
 				p->col = color;
@@ -285,8 +322,9 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 			}
 		} break;
 		case HARD_OBSTACLE_PFX: {
-			for (int i = 0; i < 1; i++) {
+			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
+				p->kind = HARD_OBSTACLE_PFX;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
 				p->pos = pos;
 				p->col = color;
@@ -299,8 +337,9 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 			}
 		} break;
 		case SNOW_PFX: {
-			for (int i = 0; i < 500; i++) {
+			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
+				p->kind = SNOW_PFX;
 				float z = get_random_float32_in_range(0, 20);
 				float a = float_alpha(z, 0, 20);
 				
@@ -371,7 +410,9 @@ Boss* create_boss() {
 	boss->entity->start_size = boss->entity->size;
 
 	TimedEvent* timed_event = initialize_boss_movement_event(world);
+	TimedEvent* attack_event = initialize_boss_attack_event(world);
 	boss->entity->timer = timed_event;
+	boss->entity->second_timer = attack_event;
 
 	return boss;
 }
@@ -595,6 +636,9 @@ void clean_world() {
 		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
 			entity_destroy(entity);
 		}
+		if (entity->entitytype == BOSS_ENTITY && entity->is_valid) {
+			entity_destroy(entity);
+		}
 		if (!(timer->worldtype == WORLD_TIMER) && timer->is_valid) {
 			timedevent_destroy(timer);
 		}
@@ -616,7 +660,7 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 		entity_destroy(projectile);
 		return;
 	}
-	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
+	particle_emit(projectile->position, COLOR_WHITE, 10, BOUNCE_PFX);
 
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
 	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
@@ -637,7 +681,7 @@ void projectile_bounce_world(Entity* projectile) {
 		entity_destroy(projectile);
 		return;
 	}
-	particle_emit(projectile->position, COLOR_WHITE, BOUNCE_PFX);
+	particle_emit(projectile->position, COLOR_WHITE, 10, BOUNCE_PFX);
 	
 	projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t)); // go back 
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
@@ -1182,6 +1226,26 @@ Vector2 update_boss_velocity(Vector2 velocity, float t) {
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
 
+void summon_icicle(Entity* entity, Vector2 spawn_pos) {
+	entity->entitytype = PROJECTILE_ENTITY;
+
+	entity->size = v2(10, 10);
+	entity->health = 1;
+	entity->max_bounces = 100;
+	entity->position = spawn_pos;
+	entity->color = rgba(200, 233, 233, 255);
+	entity->velocity = v2(0, -200);
+}
+
+void update_boss(Entity* entity, float delta_t) {
+	if (timer_finished(entity->second_timer, delta_t)) {
+		Entity* p1 = entity_create();
+		Entity* p2 = entity_create();
+		summon_icicle(p1, v2_add(entity->position, v2(entity->size.x, 0)));
+		summon_icicle(p2, v2_sub(entity->position, v2(entity->size.x, 0)));
+	}
+}
+
 void draw_boss(Entity* entity, float t, float delta_t) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer, delta_t)) {
@@ -1201,7 +1265,7 @@ void draw_boss(Entity* entity, float t, float delta_t) {
     draw_centered_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color);
 }
 
-void draw_boss_health_bar(World* world) {
+void draw_boss_health_bar(World* world, Gfx_Font* font) {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
@@ -1214,6 +1278,10 @@ void draw_boss_health_bar(World* world) {
 			float alpha = (float)entity->health / (float)entity->start_health;
 			draw_rect(v2(-health_bar_width / 2 - margin, window.height / 2 - health_bar_height - padding - margin), v2(health_bar_width + 2*margin, health_bar_height + 2*margin), v4(0.5, 0.5, 0.5, 0.5));
 			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
+			string label = sprint(get_temporary_allocator(), STR("%i"), entity->health);
+			u32 font_height = 48;
+			Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
+			draw_text(font, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
 		}
 	}
 }
@@ -1310,7 +1378,7 @@ void display_timed_event_info(TimedEvent* te, int index, float font_height, Gfx_
     if (te->progress != 0.0f) {
         temp = sprint(get_temporary_allocator(), STR("%s, Progress: %.2f"), temp, te->progress);
     }
-    if (te->counter != 0) {
+    if (te->counter <= 0) {
         temp = sprint(get_temporary_allocator(), STR("%s, Counter: %d"), temp, te->counter);
     }
 
@@ -1338,33 +1406,55 @@ void render_timed_events(World* world, float font_height, Gfx_Font* font_light) 
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
 
+void stage_0_to_9() {
+	float r = 0.0f;
+	float g = 0.0f;
+	float b = (float)current_stage_level / 20.0f;
+	world->world_background = v4(r, g, b, 1.0f); // Background color
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+	int n_snow_particles = number_of_certain_particle(SNOW_PFX);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, SNOW_PFX);
+}
+
+void stage_10_boss() {
+	Boss* boss = create_boss();
+
+	int n_snow_particles = number_of_certain_particle(SNOW_PFX);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, SNOW_PFX);
+}
+
+void stage_11_to_19() {
+	remove_all_particle_type(SNOW_PFX);
+	float stage_progress = current_stage_level - 10;
+	float r = stage_progress / 20.0f;
+	float g = 0.0f;
+	float b = 0.0f;
+	world->world_background = v4(r, g, b, 1.0f); // Background color
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+}
+
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
-	log("New stage %i", current_stage_level);
+
 	clean_world();
-	if (current_stage_level < 10) {
-		float r = 0.0f;
-		float g = 0.0f;
-		float b = (float)current_stage_level / 20.0f;
-		world->world_background = v4(r, g, b, 1.0f); // Background color
-		summon_world(SPAWN_RATE_ALL_OBSTACLES);
-	} else if (current_stage_level == 10) {
-		log("trying to create boss");
-		Boss* boss = create_boss();
-		log("Boss was created");
-		particle_emit(v2(0, 0), v4(0, 0, 0, 0), SNOW_PFX);
-		// It would be nice to need to pass both the player and delta_t through here. 
-		// Fix could be to add the player and the delta_t to the world struct. Will have to think more about it
-		//apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
-		//apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
-		//update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
-	} else if (current_stage_level <= 20) {
-		float stage_progress = current_stage_level - 10;
-		float r = stage_progress / 20.0f;
-		float g = 0.0f;
-		float b = 0.0f;
-		world->world_background = v4(r, g, b, 1.0f); // Background color
+
+	if (current_stage_level <= 9) 
+	{
+		stage_0_to_9();
+	} 
+	else if (current_stage_level == 10) 
+	{
+		stage_10_boss();
+	} 
+	else if (current_stage_level <= 20) 
+	{
+		stage_11_to_19();
+	} 
+	else 
+	{
+		remove_all_particle_type(SNOW_PFX);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
 }
@@ -1555,7 +1645,7 @@ int entry(int argc, char **argv) {
 						case(PROJECTILE_ENTITY): {
 							if (circle_circle_collision(entity, other_entity))
 							{
-								particle_emit(other_entity->position, other_entity->color, POWERUP_PFX);
+								particle_emit(other_entity->position, other_entity->color, 4, POWERUP_PFX);
 								handle_projectile_collision(entity, other_entity);
 								collision = true;
 							}
@@ -1564,7 +1654,7 @@ int entry(int argc, char **argv) {
 						case(POWERUP_ENTITY): {
 							if (circle_circle_collision(entity, other_entity)) 
 							{
-								particle_emit(other_entity->position, other_entity->color, POWERUP_PFX);
+								particle_emit(other_entity->position, other_entity->color, 4, POWERUP_PFX);
 								apply_power_up(other_entity, player);
 								handle_projectile_collision(entity, other_entity);
 								number_of_power_ups--;
@@ -1714,8 +1804,8 @@ int entry(int argc, char **argv) {
 			}
 
 			if (entity->entitytype == BOSS_ENTITY) {
+				update_boss(entity, delta_t);
 				draw_boss(entity, now, delta_t);
-				
 			}
 		}
 
@@ -1761,13 +1851,14 @@ int entry(int argc, char **argv) {
 			current_stage_level = 0;
 			number_of_shots_missed = 0;
 			clean_world();
+			remove_all_particle_type(SNOW_PFX);
 			summon_world(SPAWN_RATE_ALL_OBSTACLES);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 		}
 
 		draw_hearts(number_of_hearts, number_of_shots_missed, heart_sprite);
 
-		draw_boss_health_bar(world);
+		draw_boss_health_bar(world, font_bold);
 
 		draw_playable_area_borders();
 

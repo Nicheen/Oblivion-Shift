@@ -12,6 +12,7 @@ typedef struct Particle {
 	float fade_out_vel_range;
 	bool immortal;
 	float identifier;
+	ParticleKind kind;
 } Particle;
 Particle particles[2048] = {0};
 int particle_cursor = 0;

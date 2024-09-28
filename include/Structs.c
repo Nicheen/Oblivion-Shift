@@ -21,6 +21,7 @@ typedef struct TimedEvent {
 
 typedef struct Entity {
     TimedEvent* timer;
+	TimedEvent* second_timer;
 	struct Entity* child;
 	// --- Entity Attributes ---
 	enum EntityType entitytype;

@@ -7,6 +7,7 @@ typedef enum TimedEventType {
 	EVENT_COLOR_SWITCH = 1,
 	BEAM_EVENT = 2,
 	BOSS_MOVEMENT_EVENT = 3,
+	BOSS_ATTACK_EVENT = 4,
 } TimedEventType;
 
 typedef enum TimedEventWorldType {
