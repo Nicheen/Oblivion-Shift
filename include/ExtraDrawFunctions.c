@@ -96,3 +96,18 @@ Draw_Quad *draw_outlined_circle_xform(Matrix4 xform, Vector2 size, Vector4 color
 	
 	return q;
 }
+
+void draw_centered_rect(Vector2 position, Vector2 size, Vector4 color) {
+    Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
+    draw_rect(draw_position, size, color);
+}
+
+void draw_centered_circle(Vector2 position, Vector2 size, Vector4 color) {
+    Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
+    draw_circle(draw_position, size, color);
+}
+
+void draw_rounded_centered_rect(Vector2 position, Vector2 size, Vector4 color, float radius) {
+    Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
+    draw_rounded_rect(draw_position, size, color, radius);
+}

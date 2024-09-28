@@ -162,18 +162,19 @@ TimedEvent* initialize_beam_event(World* world) {
 	return te;
 }
 
-TimedEvent* initialize_snow_event(World* world) {
+TimedEvent* initialize_boss_movement_event(World* world) {
 	TimedEvent* te = timedevent_create(world);
 
-	te->type = SNOW_EVENT;
-	te->worldtype = STAGE_TIMER;
-	te->interval = 1.0f;
-	te->interval_timer = 0.9f;
-	te->duration = 0.0f;
-	te->progress = 0.0f;
-	te->counter = 0;
+    te->type = BOSS_MOVEMENT_EVENT;
+    te->worldtype = ENTITY_TIMER;
+    te->interval = 4.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = 0;
 
-	return te;
+    return te;
 }
 
 // -----------------------------------------------------------------------
@@ -197,8 +198,14 @@ void particle_update(float64 delta_t) {
 		}
 
 		if (p->flags & PARTICLE_FLAGS_gravity) {
-			Vector2 gravity = v2(0, -98.2f);
-			p->velocity = v2_add(p->velocity, v2_mulf(gravity, delta_t));
+			Vector2 gravity = v2(0, -40.2f);
+			if (p->identifier == 0) {
+				p->acceleration = gravity;
+			}
+			else
+			{
+				p->acceleration = v2_mulf(gravity, p->identifier);
+			}
 		}
 
 		if (p->flags & PARTICLE_FLAGS_physics) {
@@ -213,27 +220,39 @@ void particle_update(float64 delta_t) {
 	}
 }
 
-void particle_render() {
+int particle_render() {
+	int number_of_particles = 0;
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
 		Particle* p = &particles[i];
 		if (!(p->flags & PARTICLE_FLAGS_valid)) {
 			continue;
 		}
+		number_of_particles++;
 
-		if (p->pos.x > window.width / 2 || p->pos.x < -window.width / 2) {
-			if (p->pos.y > window.height / 2 || p->pos.y < -window.height / 2) {
-				particle_clear(p);
+		Vector2 window_size = v2(window.width, window.height);
+		if (is_position_outside_walls_and_bottom(p->pos, window_size)) {
+			if (p->immortal) 
+			{
+				p->velocity = v2(get_random_float32_in_range(-10, 10), p->identifier*-20);
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
 			}
+			else
+			{
+				particle_clear(p);
+				continue;
+			}
+		} else if (is_position_outside_bounds(p->pos, window_size)) {
+			continue;
 		}
+
 
 		Vector4 col = p->col;
 		if (p->flags & PARTICLE_FLAGS_fade_out_with_velocity) {
 			col.a *= float_alpha(fabsf(v2_length(p->velocity)), 0, p->fade_out_vel_range);
 		}
-
-		Vector2 draw_position = v2_sub(p->pos, v2_mulf(p->size, 0.5));
-		draw_rect(draw_position, p->size, col);
+		draw_centered_rect(p->pos, p->size, col);
 	}
+	return number_of_particles;
 }
 
 void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
@@ -280,14 +299,18 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 			}
 		} break;
 		case SNOW_PFX: {
-			for (int i = 0; i < 100; i++) {
+			for (int i = 0; i < 500; i++) {
 				Particle* p = particle_new();
+				float z = get_random_float32_in_range(0, 20);
+				float a = float_alpha(z, 0, 20);
+				
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_gravity;
-				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(0, window.height / 2));
-				p->col = v4(0.5, 0.5, 0.5, 1.0);
-				p->velocity = v2(30, 0);
-				p->end_time = os_get_elapsed_seconds() + 10.0f;
-				p->size = v2(3, 3);
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
+				p->col = v4(1.0, 1.0, 1.0, 1.0);
+				p->velocity = v2(get_random_float32_in_range(-10, 10), a*-20);
+				p->size = v2_mulf(v2(1, 1), a*3);
+				p->immortal = true;
+				p->identifier = a;
 			}
 		}
 		default: { log("Something went wrong with particle generation"); } break;
@@ -345,6 +368,10 @@ Boss* create_boss() {
 	boss->entity->start_health = boss->entity->health;
 	boss->entity->color = rgba(165, 242, 243, 255);
 	boss->entity->size = v2(50, 50);
+	boss->entity->start_size = boss->entity->size;
+
+	TimedEvent* timed_event = initialize_boss_movement_event(world);
+	boss->entity->timer = timed_event;
 
 	return boss;
 }
@@ -1037,8 +1064,7 @@ void draw_beam(Entity* entity, float delta_t) {
         draw_rect(warning_position, warning_beam_size_vec, v4(0, 1, 0, 0.5)); 
     }
 	if (entity->child != NULL) {
-        Vector2 draw_position = v2_sub(entity->child->position, v2_mulf(entity->child->size, 0.5));
-        draw_rect(draw_position, entity->child->size, v4(1, 0, 0, 0.7)); 
+		draw_centered_rect(entity->child->position, entity->child->size, v4(1, 0, 0, 0.7));
     }
 }
 
@@ -1077,6 +1103,25 @@ void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 	draw_line(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, color);
 	draw_line(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, color);
 
+}
+
+void draw_hearts(int number_of_hearts, int number_of_shots_missed, Gfx_Image* heart_sprite) {
+    int heart_size = 50;
+    int heart_padding = 0;
+    
+    // Calculate the number of hearts to draw
+    int hearts_to_draw = max(number_of_hearts - number_of_shots_missed, 0);
+
+    for (int i = 0; i < hearts_to_draw; i++) {
+        // Calculate the initial heart position
+        Vector2 heart_position = v2(window.width / 2 - (heart_size + heart_padding) * number_of_hearts, heart_size - window.height / 2);
+        
+        // Adjust the position for each heart
+        heart_position = v2_add(heart_position, v2((heart_size + heart_padding) * i, 0));
+        
+        // Draw the heart sprite at the calculated position
+        draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
+    }
 }
 
 bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vector2 size, bool enabled) {
@@ -1128,6 +1173,34 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     return pressed;
 }
 
+Vector2 update_boss_velocity(Vector2 velocity, float t) {
+    // Example of modifying the velocity based on a sine wave
+    float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
+    float new_velocity_x = velocity_amplitude * (sin(t) + 0.5f * sin(2.0f * t)); // Modify x velocity
+    float new_velocity_y = velocity_amplitude * (sin(t + 0.5f) + 0.3f * sin(3.0f * t)); // Modify y velocity
+
+    return v2(new_velocity_x, new_velocity_y); // Return updated velocity
+}
+
+void draw_boss(Entity* entity, float t, float delta_t) {
+    // Update the velocity based on the timer
+    if (timer_finished(entity->timer, delta_t)) {
+        entity->velocity = update_boss_velocity(entity->velocity, t);
+    }
+    // Amplitudes for the movement (lower values for more subtle movement)
+    float amplitude_x = 5.0f; // Reduced amplitude for x-axis
+    float amplitude_y = 10.0f;  // Reduced amplitude for y-axis
+
+    // Size scaling using a sine wave for a 3D effect
+    float size_scale = 1.0f + 0.5f * sin(t); // Scale between 0.5 and 1.5
+    entity->size = v2_mulf(entity->start_size, size_scale); // Use start_size for scaling
+
+    // Draw the boss with the updated position and scaled size
+    draw_centered_rect(entity->position, entity->size, entity->color);
+    draw_centered_rect(v2_add(entity->position, v2(entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color);
+    draw_centered_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color);
+}
+
 void draw_boss_health_bar(World* world) {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
@@ -1136,10 +1209,11 @@ void draw_boss_health_bar(World* world) {
 		if (entity->entitytype == BOSS_ENTITY) {
 			float health_bar_height = 50;
 			float health_bar_width = 150;
-			float height_padding = 15;
+			float padding = 15;
+			float margin = 5;
 			float alpha = (float)entity->health / (float)entity->start_health;
-			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - height_padding), v2(health_bar_width, health_bar_height), v4(0.5, 0.5, 0.5, 0.5));
-			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - height_padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
+			draw_rect(v2(-health_bar_width / 2 - margin, window.height / 2 - health_bar_height - padding - margin), v2(health_bar_width + 2*margin, health_bar_height + 2*margin), v4(0.5, 0.5, 0.5, 0.5));
+			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
 		}
 	}
 }
@@ -1213,6 +1287,53 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	}
 }
 
+void display_timed_event_info(TimedEvent* te, int index, float font_height, Gfx_Font* font_light, float* y_offset) {
+    // Only proceed if the TimedEvent is valid
+    if (!te->is_valid) return;
+
+    // Start the string with basic info
+    string temp = sprintf(get_temporary_allocator(), "TimedEvent %d - Type: %d", index, te->type);
+
+    // Append other parameters conditionally
+    if (te->interval != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Interval: %.2f"), temp, te->interval);
+    }
+    if (te->interval_timer != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, I-timer: %.2f"), temp, te->interval_timer);
+    }
+    if (te->duration != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Duration: %.2f"), temp, te->duration);
+    }
+    if (te->duration_timer != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, D-timer: %.2f"), temp, te->duration_timer);
+    }
+    if (te->progress != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Progress: %.2f"), temp, te->progress);
+    }
+    if (te->counter != 0) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Counter: %d"), temp, te->counter);
+    }
+
+    // Display the final constructed string at the current y_offset
+    draw_text(font_light, 
+        temp, 
+        font_height, 
+        v2(-window.width / 2, window.height / 2 - 200 - *y_offset),  // Adjust y-position based on y_offset
+        v2(0.4, 0.4), 
+        COLOR_GREEN
+    );
+
+    // Increase the y_offset for the next valid TimedEvent
+    *y_offset += 25;  // Increase this value to adjust the vertical spacing between events
+}
+
+void render_timed_events(World* world, float font_height, Gfx_Font* font_light) {
+    float y_offset = 0;  // Initialize y_offset to zero
+    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+        display_timed_event_info(&world->timedevents[i], i, font_height, font_light, &y_offset);
+    }
+}
+
 // -----------------------------------------------------------------------
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
@@ -1232,12 +1353,12 @@ void initialize_new_stage(World* world, int current_stage_level) {
 		log("trying to create boss");
 		Boss* boss = create_boss();
 		log("Boss was created");
+		particle_emit(v2(0, 0), v4(0, 0, 0, 0), SNOW_PFX);
 		// It would be nice to need to pass both the player and delta_t through here. 
 		// Fix could be to add the player and the delta_t to the world struct. Will have to think more about it
 		//apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
 		//apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
 		//update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
-		TimedEvent* snow_switch_event = initialize_snow_event(world);
 	} else if (current_stage_level <= 20) {
 		float stage_progress = current_stage_level - 10;
 		float r = stage_progress / 20.0f;
@@ -1245,21 +1366,6 @@ void initialize_new_stage(World* world, int current_stage_level) {
 		float b = 0.0f;
 		world->world_background = v4(r, g, b, 1.0f); // Background color
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
-	}
-}
-
-void update_stage(World* world, int stage, float delta_t) {
-	if (stage == 10) {
-		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-			TimedEvent* te = &world->timedevents[i];
-			if (!te->is_valid) continue;
-
-			if (te->type == SNOW_EVENT) {
-				if (timer_finished(te, delta_t)) {
-					particle_emit(v2(0, 0), v4(0, 0, 0, 0), SNOW_PFX);
-				}	
-			}
-		}
 	}
 }
 
@@ -1424,6 +1530,7 @@ int entry(int argc, char **argv) {
 			if (!entity->is_valid) continue;
 			entity_counter++;
 
+			// Update positon from velocity of entity if game is not paused
 			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 			
 			if (entity->entitytype == PROJECTILE_ENTITY) 
@@ -1435,27 +1542,16 @@ int entry(int argc, char **argv) {
 					if (entity == other_entity) continue;
 					if (collision) break;
 					switch(other_entity->entitytype) {
-						case(BOSS_ENTITY): {
+						case(PLAYER_ENTITY):
+						case(BOSS_ENTITY):
+						case(OBSTACLE_ENTITY):{
 							if (circle_rect_collision(entity, other_entity)) 
 							{
 								handle_projectile_collision(entity, other_entity);
 								collision = true;
 							} 
 						} break;
-						case(PLAYER_ENTITY): {
-							if (circle_rect_collision(entity, other_entity)) 
-							{
-								handle_projectile_collision(entity, other_entity);
-								collision = true;
-							} 
-						} break;
-						case(OBSTACLE_ENTITY): {
-							if (circle_rect_collision(entity, other_entity)) 
-							{
-								handle_projectile_collision(entity, other_entity);
-								collision = true;
-							} 
-						} break;
+
 						case(PROJECTILE_ENTITY): {
 							if (circle_circle_collision(entity, other_entity))
 							{
@@ -1464,6 +1560,7 @@ int entry(int argc, char **argv) {
 								collision = true;
 							}
 						} break;
+
 						case(POWERUP_ENTITY): {
 							if (circle_circle_collision(entity, other_entity)) 
 							{
@@ -1505,7 +1602,8 @@ int entry(int argc, char **argv) {
 				}
 			}
 			
-			if (entity->obstacle_type == BEAM_OBSTACLE) {
+			if (entity->obstacle_type == BEAM_OBSTACLE) 
+			{
 				draw_beam(entity, delta_t);
 				if (entity->child != NULL) { // We have a beam
 					if (rect_rect_collision(entity->child, player->entity)) {
@@ -1514,160 +1612,135 @@ int entry(int argc, char **argv) {
 				}
 			}
 
-			{ // Draw The Entity 
-				// TODO: Timer keeps on going after game is paused
-				if (entity->entitytype == PROJECTILE_ENTITY || entity->entitytype == POWERUP_ENTITY)
-				{
-					if (entity->entitytype == POWERUP_ENTITY && !is_game_paused)
-					{
-						if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
-							float random_position_power_up = get_random_int_in_range(-PLAYABLE_WIDTH, PLAYABLE_WIDTH);
-							entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(now + random_position_power_up), -100);
-						}
-						float a = 0.2 * sin(7*now) + 0.8;
-						Vector4 col = entity->color;
-						entity->color = v4(col.x, col.y, col.z, a);
-					}
-
-					Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-
-					if (entity->entitytype == POWERUP_ENTITY && entity->power_up_type == HEALTH_POWER_UP)
-					{
-						draw_image(power_up_heart_sprite, draw_position, entity->size, v4(1, 1, 1, 1));
-					}
-					else
-					{
-						draw_circle(v2_sub(draw_position, v2(1, 1)), v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
-						draw_circle(draw_position, entity->size, entity->color);
-					}
+			if (entity->entitytype == POWERUP_ENTITY)
+			{
+				if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
+					float random_position_power_up = get_random_int_in_range(-PLAYABLE_WIDTH, PLAYABLE_WIDTH);
+					entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(now + random_position_power_up), -100);
 				}
+				
+				float a = 0.2 * sin(7*now) + 0.8;
+				Vector4 col = entity->color;
+				entity->color = v4(col.x, col.y, col.z, a);
 
-				if (entity->entitytype == PLAYER_ENTITY || entity->entitytype == OBSTACLE_ENTITY || entity->entitytype == BOSS_ENTITY) 
+				draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
+				draw_centered_circle(entity->position, entity->size, entity->color);
+			}
+
+			if (entity->entitytype == PROJECTILE_ENTITY)
+			{
+				draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
+				draw_centered_circle(entity->position, entity->size, entity->color);
+			}
+
+			if (entity->entitytype == OBSTACLE_ENTITY) 
+			{
+				switch(entity->obstacle_type) 
 				{
-					if (entity->entitytype == OBSTACLE_ENTITY) 
-					{
-						switch(entity->obstacle_type) 
-						{
-							case(DROP_OBSTACLE): {
-								entity->color = v4(1, 1, 1, 0.3);
-							} break;
-							case(BEAM_OBSTACLE): {
-								entity->color = v4(0, 1, 0, 0.3);
-							} break;
-							case(HARD_OBSTACLE):
-								float r = 0.5 * sin(now + 3*PI32) + 0.5;
-								entity->color = v4(r, 0, 1, 1);
-								break;
-							case(BLOCK_OBSTACLE):
-								float a = 0.3 * sin(2*now) + 0.7;
-								entity->color = v4(0.2, 0.2, 0.2, a);
-								break;
-							case(POWERUP_OBSTACLE):
-								entity->color = v4(0, 0, 1, 1);
-								break;
-							default: { } break; 
-						}
-						if (entity->obstacle_type == DROP_OBSTACLE) {
-							int x = entity->grid_position.x;
-							int y = entity->grid_position.y;
-							if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
-								if (entity->drop_interval >= entity->drop_interval_timer) {
-									if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
-									
-									float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
-
-									if (drop_time_left < entity->drop_duration_time) {
-										float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
-										float drop_size = 10 * drop_alpha;
-										Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
-										Vector2 draw_position = v2_sub(entity->position, v2_mulf(v2(drop_size, drop_size), 0.5));
-										draw_circle(draw_position, v2(drop_size, drop_size), drop_color);
-									}
-								}
-								else
-								{
-									entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
-									entity->drop_interval_timer = 0.0f;
-									Entity* drop_projectile = entity_create();
-									summon_projectile_drop(drop_projectile, entity);
-								}
-							}
-						}
-
-						if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
-							if (!(is_game_paused)) entity->wave_time -= delta_t;
-
-							if (entity->wave_time < 0.0f) {
-								entity->wave_time = 0.0f;
-							}
-							float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
-							float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
+					case(DROP_OBSTACLE): {
+						entity->color = v4(1, 1, 1, 0.3);
+					} break;
+					case(BEAM_OBSTACLE): {
+						entity->color = v4(0, 1, 0, 0.3);
+					} break;
+					case(HARD_OBSTACLE):
+						float r = 0.5 * sin(now + 3*PI32) + 0.5;
+						entity->color = v4(r, 0, 1, 1);
+						break;
+					case(BLOCK_OBSTACLE):
+						float a = 0.3 * sin(2*now) + 0.7;
+						entity->color = v4(0.2, 0.2, 0.2, a);
+						break;
+					case(POWERUP_OBSTACLE):
+						entity->color = v4(0, 0, 1, 1);
+						break;
+					default: { } break; 
+				}
+				if (entity->obstacle_type == DROP_OBSTACLE) {
+					int x = entity->grid_position.x;
+					int y = entity->grid_position.y;
+					if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
+						if (entity->drop_interval >= entity->drop_interval_timer) {
+							if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
 							
-							// Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
-							float extra_size = 5.0f;
+							float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
 
-							float size_value = extra_size * easeOutBounce(normalized_wave_time);
-							if (size_value >= extra_size * 0.5) {
-								size_value = extra_size * easeOutBounce(entity->wave_time_beginning - normalized_wave_time);
+							if (drop_time_left < entity->drop_duration_time) {
+								float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
+								float drop_size = 10 * drop_alpha;
+								Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
+								draw_centered_circle(entity->position, v2(drop_size, drop_size), drop_color);
 							}
-							Vector2 diff_size = v2_add(entity->size, v2(size_value, size_value));
-							
-							Vector2 draw_position = v2_sub(entity->position, v2_mulf(diff_size, 0.5));
-							draw_rounded_rect(draw_position, diff_size, entity->color, 0.1);
 						}
 						else
 						{
-							Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-							draw_rounded_rect(draw_position, entity->size, entity->color, 0.1);
+							entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
+							entity->drop_interval_timer = 0.0f;
+							Entity* drop_projectile = entity_create();
+							summon_projectile_drop(drop_projectile, entity);
 						}
 					}
-					else
-					{
-						limit_player_position(player, delta_t);
-						Vector2 draw_position = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
-						draw_rect(draw_position, entity->size, entity->color);
+				}
+
+				if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
+					if (!(is_game_paused)) entity->wave_time -= delta_t;
+
+					if (entity->wave_time < 0.0f) {
+						entity->wave_time = 0.0f;
 					}
+					float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
+					float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
 					
+					// Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+					float extra_size = 5.0f;
+
+					float size_value = extra_size * easeOutBounce(normalized_wave_time);
+					if (size_value >= extra_size * 0.5) {
+						size_value = extra_size * easeOutBounce(entity->wave_time_beginning - normalized_wave_time);
+					}
+					Vector2 diff_size = v2_add(entity->size, v2(size_value, size_value));
 					
-	
-					Vector2 draw_position_2 = v2_sub(entity->position, v2_mulf(v2(5, 5), 0.5));
-					if (debug_mode) { draw_circle(draw_position_2, v2(5, 5), v4(0, 1, 0, 0.5)); }
-				}	
+					draw_rounded_centered_rect(entity->position, diff_size, entity->color, 0.1);
+				}
+				else
+				{
+					draw_rounded_centered_rect(entity->position, entity->size, entity->color, 0.1);
+				}
+			}
+
+			if (entity->entitytype == PLAYER_ENTITY) {
+				limit_player_position(player, delta_t);
+				draw_centered_rect(entity->position, entity->size, entity->color);
+			}
+
+			if (entity->entitytype == BOSS_ENTITY) {
+				draw_boss(entity, now, delta_t);
+				
 			}
 		}
 
-		if (!(is_game_paused)) particle_update(delta_t);
-		particle_render();
 		
 		if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
 			window.clear_color = world->world_background;
 		}
+
+		if (!(is_game_paused)) { particle_update(delta_t); }
+		
+		int number_of_particles = particle_render();
+		
 		
 		if (debug_mode) {
+			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 			
-			// Display TimedEvent parameters
-			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-				TimedEvent* te = &world->timedevents[i];
-				if (!te->is_valid) continue;
-
-				// Displaying information for each valid TimedEvent
-				draw_text(font_light, 
-					sprint(get_temporary_allocator(), 
-						STR("TimedEvent %d - Type: %d, Interval: %.2f, I-timer: %.2f, Duration: %.2f, D-timer: %.2f, Progress: %.2f, Counter: %d"), 
-						i, te->type, te->interval, te->interval_timer, te->duration, te->duration_timer, te->progress, te->counter),
-					font_height, 
-					v2(-window.width / 2, window.height / 2 - 175 - (i * 25)),  // Adjust y-position for each TimedEvent
-					v2(0.4, 0.4), 
-					COLOR_GREEN
-				);
-			}
+			render_timed_events(world, font_height, font_light);
 			
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
 				Entity* entity = &world->entities[i];
@@ -1676,6 +1749,8 @@ int entry(int argc, char **argv) {
 					draw_text(font_light, sprint(get_temporary_allocator(), STR("%i"), entity->health), font_height, v2_sub(entity->position, v2_mulf(entity->size, 0.5)), v2(0.2, 0.2), COLOR_GREEN);
 				}	
 			}
+
+			
 		}
 		
 		// Check if game is over or not
@@ -1690,22 +1765,10 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 		}
 
-		int heart_size = 50;
-		int heart_padding = 0;
-		for (int i = 0; i < max(number_of_hearts - number_of_shots_missed, 0); i++) {
-			Vector2 heart_position = v2(window.width / 2 - (heart_size+heart_padding)*number_of_hearts, heart_size - window.height / 2);
-			heart_position = v2_add(heart_position, v2((heart_size + heart_padding)*i, 0));
-			draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
-		}
-
-		if (debug_mode) 
-		{
-			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
-		}
+		draw_hearts(number_of_hearts, number_of_shots_missed, heart_sprite);
 
 		draw_boss_health_bar(world);
 
-		
 		draw_playable_area_borders();
 
 		draw_death_borders(color_switch_event, delta_t);
@@ -1714,7 +1777,7 @@ int entry(int argc, char **argv) {
 
 		draw_main_menu(font_light, font_bold);
 
-		update_stage(world, current_stage_level, delta_t);
+		
 		os_update();
 		gfx_update();
 

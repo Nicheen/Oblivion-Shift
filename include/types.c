@@ -6,14 +6,13 @@ typedef enum TimedEventType {
 	NIL_EVENTTYPE = 0,
 	EVENT_COLOR_SWITCH = 1,
 	BEAM_EVENT = 2,
-	SNOW_EVENT = 3,
+	BOSS_MOVEMENT_EVENT = 3,
 } TimedEventType;
 
 typedef enum TimedEventWorldType {
 	NIL_TIMERWORLDTYPE = 0,
 	WORLD_TIMER = 1,
 	ENTITY_TIMER = 2,
-	STAGE_TIMER = 3,
 } TimedEventWorldType;
 
 typedef enum ParticleFlags {

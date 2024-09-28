@@ -25,6 +25,7 @@ typedef struct Entity {
 	// --- Entity Attributes ---
 	enum EntityType entitytype;
 	Vector2 size;
+	Vector2 start_size;
 	Vector2 position;
 	Vector2 velocity;
 	Vector2 acceleration;

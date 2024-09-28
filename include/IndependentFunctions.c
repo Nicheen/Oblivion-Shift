@@ -19,6 +19,17 @@ bool has_reached_end_time(float64 current_time, float64 end_time) {
 	return current_time > end_time;
 }
 
+bool is_position_outside_bounds(Vector2 pos, Vector2 window_size) {
+    // Check if the position is within the window boundaries
+    return (pos.x > window_size.x / 2 || pos.x < -window_size.x / 2 ||
+            pos.y > window_size.y / 2 || pos.y < -window_size.y / 2);
+}
+
+bool is_position_outside_walls_and_bottom(Vector2 pos, Vector2 window_size) {
+    return (pos.x > window_size.x / 2 || pos.x < -window_size.x / 2 ||
+            pos.y < -window_size.y / 2);
+}
+
 bool almost_equals(float a, float b, float epsilon) {
  return fabs(a - b) <= epsilon;
 }

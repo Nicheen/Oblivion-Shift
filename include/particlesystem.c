@@ -10,6 +10,8 @@ typedef struct Particle {
 	float friction;
 	float64 end_time;
 	float fade_out_vel_range;
+	bool immortal;
+	float identifier;
 } Particle;
 Particle particles[2048] = {0};
 int particle_cursor = 0;
