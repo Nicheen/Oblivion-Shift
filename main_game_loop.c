@@ -162,6 +162,20 @@ TimedEvent* initialize_beam_event(World* world) {
 	return te;
 }
 
+TimedEvent* initialize_snow_event(World* world) {
+	TimedEvent* te = timedevent_create(world);
+
+	te->type = SNOW_EVENT;
+	te->worldtype = STAGE_TIMER;
+	te->interval = 1.0f;
+	te->interval_timer = 0.9f;
+	te->duration = 0.0f;
+	te->progress = 0.0f;
+	te->counter = 0;
+
+	return te;
+}
+
 // -----------------------------------------------------------------------
 //                          PARTICLE FUNCTIONS
 // -----------------------------------------------------------------------
@@ -204,6 +218,12 @@ void particle_render() {
 		Particle* p = &particles[i];
 		if (!(p->flags & PARTICLE_FLAGS_valid)) {
 			continue;
+		}
+
+		if (p->pos.x > window.width / 2 || p->pos.x < -window.width / 2) {
+			if (p->pos.y > window.height / 2 || p->pos.y < -window.height / 2) {
+				particle_clear(p);
+			}
 		}
 
 		Vector4 col = p->col;
@@ -259,6 +279,17 @@ void particle_emit(Vector2 pos, Vector4 color, ParticleKind kind) {
 				p->size = v2(3, 3);
 			}
 		} break;
+		case SNOW_PFX: {
+			for (int i = 0; i < 100; i++) {
+				Particle* p = particle_new();
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_gravity;
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(0, window.height / 2));
+				p->col = v4(0.5, 0.5, 0.5, 1.0);
+				p->velocity = v2(30, 0);
+				p->end_time = os_get_elapsed_seconds() + 10.0f;
+				p->size = v2(3, 3);
+			}
+		}
 		default: { log("Something went wrong with particle generation"); } break;
 	}
 }
@@ -311,7 +342,8 @@ Boss* create_boss() {
 	boss->entity = entity_create();
 	boss->entity->entitytype = BOSS_ENTITY;
 	boss->entity->health = 10;
-	boss->entity->color = v4(1, 1, 0, 1);
+	boss->entity->start_health = boss->entity->health;
+	boss->entity->color = rgba(165, 242, 243, 255);
 	boss->entity->size = v2(50, 50);
 
 	return boss;
@@ -389,7 +421,7 @@ void summon_power_up_drop(Entity* obstacle) {
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = OBSTACLE_ENTITY;
 
-	int size = 20;
+	int size = 21;
 	int padding = 10;
 	entity->size = v2(size, size);
 	entity->grid_position = v2(x_index, y_index);
@@ -660,6 +692,18 @@ void play_random_blop_sound() {
             play_one_audio_clip(STR("res/sound_effects/blop4.wav"));
             break;
     }
+}
+
+bool boss_is_alive(World* world) {
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		if (!entity->is_valid) continue;
+
+		if (entity->entitytype == BOSS_ENTITY) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // -----------------------------------------------------------------------
@@ -1084,6 +1128,22 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     return pressed;
 }
 
+void draw_boss_health_bar(World* world) {
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		if (!entity->is_valid) continue;
+		
+		if (entity->entitytype == BOSS_ENTITY) {
+			float health_bar_height = 50;
+			float health_bar_width = 150;
+			float height_padding = 15;
+			float alpha = (float)entity->health / (float)entity->start_health;
+			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - height_padding), v2(health_bar_width, health_bar_height), v4(0.5, 0.5, 0.5, 0.5));
+			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - height_padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
+		}
+	}
+}
+
 void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	if (is_main_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
@@ -1161,13 +1221,14 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 // Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
 	log("New stage %i", current_stage_level);
+	clean_world();
 	if (current_stage_level < 10) {
 		float r = 0.0f;
-		float g = (float)current_stage_level / 20.0f;
-		float b = 0.0f;
+		float g = 0.0f;
+		float b = (float)current_stage_level / 20.0f;
 		world->world_background = v4(r, g, b, 1.0f); // Background color
-	}
-	else if (current_stage_level == 10) {
+		summon_world(SPAWN_RATE_ALL_OBSTACLES);
+	} else if (current_stage_level == 10) {
 		log("trying to create boss");
 		Boss* boss = create_boss();
 		log("Boss was created");
@@ -1176,17 +1237,30 @@ void initialize_new_stage(World* world, int current_stage_level) {
 		//apply_debuff_to_player(player, DEBUFF_SLOW_PLAYER, 10.0f);  // Applicerar slow-debuff för 5 sekunder
 		//apply_debuff_effects(player);  // Tillämpa debuff-effekter varje frame
 		//update_player_debuffs(player, delta_t);  // Uppdatera debuff-tider
-	}
-	else if (current_stage_level <= 20) {
+		TimedEvent* snow_switch_event = initialize_snow_event(world);
+	} else if (current_stage_level <= 20) {
 		float stage_progress = current_stage_level - 10;
 		float r = stage_progress / 20.0f;
 		float g = 0.0f;
 		float b = 0.0f;
 		world->world_background = v4(r, g, b, 1.0f); // Background color
+		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
-	
-	clean_world();
-	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+}
+
+void update_stage(World* world, int stage, float delta_t) {
+	if (stage == 10) {
+		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			TimedEvent* te = &world->timedevents[i];
+			if (!te->is_valid) continue;
+
+			if (te->type == SNOW_EVENT) {
+				if (timer_finished(te, delta_t)) {
+					particle_emit(v2(0, 0), v4(0, 0, 0, 0), SNOW_PFX);
+				}	
+			}
+		}
+	}
 }
 
 int entry(int argc, char **argv) {
@@ -1209,16 +1283,6 @@ int entry(int argc, char **argv) {
 
 	world = alloc(get_heap_allocator(), sizeof(World));
 	memset(world, 0, sizeof(World));
-	
-	// Shader Stuff
-	string source;
-	bool ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
-	assert(ok, "Could not read include/shaders.hlsl");
-
-	gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
-	dealloc_string(get_heap_allocator(), source);
-
-	My_Cbuffer cbuffer;
 
 	// Load in images and other stuff from disk
 	Gfx_Font *font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
@@ -1243,7 +1307,7 @@ int entry(int argc, char **argv) {
 	//                      WORLD TIMED EVENTS ARE MADE HERE
 	// -----------------------------------------------------------------------
 	TimedEvent* color_switch_event = initialize_color_switch_event(world);
-	
+
 	while (!window.should_close) {
 		reset_temporary_storage();
 
@@ -1257,11 +1321,6 @@ int entry(int argc, char **argv) {
 		mouse_position = MOUSE_POSITION();
 
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background);
-
-		// Shader Stuff
-		cbuffer.mouse_pos_screen = v2(input_frame.mouse_x, input_frame.mouse_y);
-		cbuffer.window_size = v2(window.width, window.height);
-		draw_frame.cbuffer = &cbuffer;
 
 		// -----------------------------------------------------------------------
 		//                        HERE WE DO BUTTON INPUTS
@@ -1314,14 +1373,6 @@ int entry(int argc, char **argv) {
 					window.clear_color = world->world_background;
 					break;  // Exit the loop after processing one key
 				}
-			}
-
-			// Shader hot reloading
-			if (is_key_just_pressed('R')) {
-				ok = os_read_entire_file("include/shaders.hlsl", &source, get_heap_allocator());
-				assert(ok, "Could not read include/shaders.hlsl");
-				gfx_shader_recompile_with_extension(source, sizeof(My_Cbuffer));
-				dealloc_string(get_heap_allocator(), source);
 			}
 		}
 	
@@ -1588,7 +1639,7 @@ int entry(int argc, char **argv) {
 		if (!(is_game_paused)) particle_update(delta_t);
 		particle_render();
 		
-		if (obstacle_count - number_of_block_obstacles <= 0) {
+		if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 			current_stage_level++;
 			initialize_new_stage(world, current_stage_level);
 			window.clear_color = world->world_background;
@@ -1600,7 +1651,8 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
-			 // Display TimedEvent parameters
+			
+			// Display TimedEvent parameters
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				TimedEvent* te = &world->timedevents[i];
 				if (!te->is_valid) continue;
@@ -1651,6 +1703,8 @@ int entry(int argc, char **argv) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 		}
 
+		draw_boss_health_bar(world);
+
 		
 		draw_playable_area_borders();
 
@@ -1660,6 +1714,7 @@ int entry(int argc, char **argv) {
 
 		draw_main_menu(font_light, font_bold);
 
+		update_stage(world, current_stage_level, delta_t);
 		os_update();
 		gfx_update();
 

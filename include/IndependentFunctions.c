@@ -40,3 +40,11 @@ void animate_v2_to_target(Vector2* value, Vector2 target, float delta_t, float r
 	animate_f32_to_target(&(value->x), target.x, delta_t, rate);
 	animate_f32_to_target(&(value->y), target.y, delta_t, rate);
 }
+
+Vector4 rgba(float r, float g, float b, float a) {
+	float alpha_r = (float)r / (float)255;
+	float alpha_g = (float)g / (float)255;
+	float alpha_b = (float)b / (float)255;
+	float alpha_a = (float)a / (float)255;
+	return v4(alpha_r, alpha_g, alpha_b, alpha_a);
+}

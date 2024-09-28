@@ -30,6 +30,7 @@ typedef struct Entity {
 	Vector2 acceleration;
 	Vector2 deceleration;
 	Vector4 color;
+	int start_health;
 	int health;
 	bool is_valid;
 	// --- Entity Type Below ---

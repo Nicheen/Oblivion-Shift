@@ -1,3 +1,4 @@
+// https://easings.net/#easeInOutCubic
 inline float easeInOutCubic(float x) {
     if (x < 0.5) {
         return 4 * x * x * x;
@@ -6,10 +7,12 @@ inline float easeInOutCubic(float x) {
     }
 }
 
+// https://easings.net/#easeInSine
 inline float easeInSine(float x) {
     return 1 - cos((x * PI32) / 2);
 }
 
+// https://easings.net/#easeOutBounce
 inline float easeOutBounce(float x) {
 	const float n1 = 7.5625;
 	const float d1 = 2.75;
