@@ -1054,15 +1054,30 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	}
 }
 
-void handle_beam_collision(Entity* beam, Entity* player) {
+void handle_beam_collision(Entity* beam, Player* player) {
 	// TODO: Implement a timer so player gets damaged slowly
 	int damage = 1.0f; // This can be changes in the future
 	number_of_shots_missed++;
+	player->is_immune = true;
+    player->immunity_timer = 1.0f;
 }
 
 // -----------------------------------------------------------------------
 //                         PLAYER FUNCTIONS
 // -----------------------------------------------------------------------
+void update_player(Player* player, float delta_t) {
+    // Hantera immunitet
+    if (player->is_immune) {
+        player->immunity_timer -= delta_t; // Minska timer
+        if (player->immunity_timer <= 0.0f) {
+            player->is_immune = false; // Spelaren är inte längre immun
+        }
+	if (player->immunity_timer <= 0.0f) {
+            player->is_immune = false; // Spelaren är inte längre immun
+        }
+    }
+    
+}
 
 void update_player_position(Player* player, float delta_t) {
     Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
@@ -1917,11 +1932,14 @@ int entry(int argc, char **argv) {
 				}
 			}
 			
-			if (entity->obstacle_type == OBSTACLE_BEAM) 
-			{
-				if (entity->child != NULL) { // We have a beam
+			if (entity->obstacle_type == OBSTACLE_BEAM) {
+				if (entity->child != NULL) {
 					if (rect_rect_collision(entity->child, player->entity)) {
-						handle_beam_collision(entity->child, player->entity);
+						if (!player->is_immune) {
+							handle_beam_collision(entity->child, player);
+							player->is_immune = true; // Sätt spelaren som immun
+							player->immunity_timer = 1.0f; // Sätt timer för immunitet
+						}
 					}
 				}
 			}
