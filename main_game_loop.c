@@ -17,19 +17,23 @@
 int number_of_destroyed_obstacles = 0;
 int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
-int number_of_power_ups = 0;
+int number_of_effects = 0;
 int number_of_block_obstacles = 0;
 float projectile_speed = 500;
 int number_of_hearts = 3;
 int current_stage_level = 0;
-float timer_power_up = 0;
 int obstacle_count = 0;
+int latest_fps = 0;
+int latest_entites = 0;
+const u32 font_height = 48;
 
-bool mercy_bottom;
-bool mercy_top;
+Gfx_Font* font_light = NULL;
+Gfx_Font* font_bold = NULL;
+Gfx_Image* heart_sprite = NULL;
+Gfx_Image* effect_heart_sprite = NULL;
+
 bool debug_mode = false;
 bool game_over = false;
-bool is_power_up_active = false;
 
 //
 // ---- Menu Booleans ---- 
@@ -45,13 +49,18 @@ bool is_game_paused = false;
 
 Vector2 mouse_position; // the current mouse position
 float64 delta_t; // The difference in time between frames
+float64 now;
+TimedEvent* color_switch_event = 0;
+Player* player = 0;
 World* world = 0; // Create an empty world to use for functions below
 
 // -----------------------------------------------------------------------
 //                  CREATE FUNCTIONS FOR ARRAY LOOKUP
 // -----------------------------------------------------------------------
-Entity* entity_create() {
+Entity* create_entity() {
 	Entity* entity_found = 0;
+	entity_found = alloc(get_heap_allocator(), sizeof(Entity));
+	memset(entity_found, 0, sizeof(Entity));
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* existing_entity = &world->entities[i];
 		if (!existing_entity->is_valid) {
@@ -64,11 +73,11 @@ Entity* entity_create() {
 	return entity_found;
 }
 
-void entity_destroy(Entity* entity) {
+void destroy_entity(Entity* entity) {
 	memset(entity, 0, sizeof(Entity));
 }
 
-TimedEvent* timedevent_create(World* world) {
+TimedEvent* create_timedevent(World* world) {
 	TimedEvent* timedevent_found = 0;
 	timedevent_found = alloc(get_heap_allocator(), sizeof(TimedEvent));
 	memset(timedevent_found, 0, sizeof(TimedEvent));
@@ -84,23 +93,35 @@ TimedEvent* timedevent_create(World* world) {
 	return timedevent_found;
 }
 
-void timedevent_destroy(TimedEvent* timedevent) {
+void destroy_timedevent(TimedEvent* timedevent) {
 	memset(timedevent, 0, sizeof(TimedEvent));
 }
 
-// TODO:
-// Convert powerup and debuff to the same system as the ones above
-//                            To create:
-// PowerUp* powerup_create()
-// void poweruo_destroy()
-// Debuff* debuff_create()
-// void debuff_destroy() 
+Effect* create_effect() {
+	Effect* effect_found = 0;
+	effect_found = alloc(get_heap_allocator(), sizeof(Effect));
+	memset(effect_found, 0, sizeof(Effect));
+	for (int i = 0; i < MAX_EFFECT_COUNT; i++) {
+		Effect* existing_effect = &world->effects[i];
+		if (!existing_effect->is_valid) {
+			effect_found = existing_effect;
+			break;
+		}
+	}
+	assert(effect_found, "No more free effect slots!");
+	effect_found->is_valid = true;
+	return effect_found;
+}
+
+void destroy_effect(Effect* effect) {
+	memset(effect, 0, sizeof(Effect));
+}
 
 // -----------------------------------------------------------------------
 //                         TIMER FUNCTIONS
 // -----------------------------------------------------------------------
 
-bool timer_finished(TimedEvent* timed_event, float delta_t) {
+bool timer_finished(TimedEvent* timed_event) {
     // Update the timer with the elapsed time
     if (!is_game_paused) timed_event->interval_timer += delta_t;
 
@@ -135,10 +156,10 @@ bool timer_finished(TimedEvent* timed_event, float delta_t) {
 }
 
 TimedEvent* initialize_color_switch_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
+	TimedEvent* te = create_timedevent(world);
 
-	te->type = EVENT_COLOR_SWITCH;
-	te->worldtype = WORLD_TIMER;
+	te->type = TIMED_EVENT_COLOR_SWITCH;
+	te->worldtype = TIMED_EVENT_TYPE_WORLD;
 	te->interval = 4.0f;
 	te->interval_timer = 0.0f;
 	te->duration = 0.0f;
@@ -149,10 +170,10 @@ TimedEvent* initialize_color_switch_event(World* world) {
 }
 
 TimedEvent* initialize_beam_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
+	TimedEvent* te = create_timedevent(world);
 
-	te->type = BEAM_EVENT;
-	te->worldtype = ENTITY_TIMER;
+	te->type = TIMED_EVENT_BEAM;
+	te->worldtype = TIMED_EVENT_TYPE_ENTITY;
 	te->interval = 10.0f;
 	te->interval_timer = get_random_float32_in_range(0, 0.7*te->interval);
 	te->duration = 1.0f;
@@ -163,10 +184,10 @@ TimedEvent* initialize_beam_event(World* world) {
 }
 
 TimedEvent* initialize_boss_movement_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
+	TimedEvent* te = create_timedevent(world);
 
-    te->type = BOSS_MOVEMENT_EVENT;
-    te->worldtype = ENTITY_TIMER;
+    te->type = TIMED_EVENT_BOSS_MOVEMENT;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
     te->interval = 4.0f; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
@@ -178,11 +199,26 @@ TimedEvent* initialize_boss_movement_event(World* world) {
 }
 
 TimedEvent* initialize_boss_attack_event(World* world) {
-	TimedEvent* te = timedevent_create(world);
+	TimedEvent* te = create_timedevent(world);
 
-    te->type = BOSS_ATTACK_EVENT;
-    te->worldtype = ENTITY_TIMER;
+    te->type = TIMED_EVENT_BOSS_ATTACK;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
     te->interval = 2.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_effect_event(World* world, float duration) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_EFFECT;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = duration; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -216,7 +252,7 @@ void remove_all_particle_type(ParticleKind kind) {
 	}
 }
 
-void particle_update(float64 delta_t) {
+void particle_update() {
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
 		Particle* p = &particles[i];
 		if (!(p->flags & PARTICLE_FLAGS_valid)) {
@@ -292,10 +328,10 @@ int particle_render() {
 
 void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kind) {
 	switch (kind) {
-		case BOUNCE_PFX: {
+		case PFX_BOUNCE: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
-				p->kind = BOUNCE_PFX;
+				p->kind = PFX_BOUNCE;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
 				p->pos = pos;
 				p->col = color;
@@ -306,10 +342,10 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->size = v2(1, 1);
 			}
 		} break;
-		case POWERUP_PFX: {
+		case PFX_EFFECT: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
-				p->kind = POWERUP_PFX;
+				p->kind = PFX_EFFECT;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity | PARTICLE_FLAGS_gravity;
 				p->pos = v2(pos.x + get_random_int_in_range(-10, 10), pos.y + get_random_int_in_range(-10, 10));
 				p->col = color;
@@ -321,10 +357,10 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->size = v2(4, 4);
 			}
 		} break;
-		case HARD_OBSTACLE_PFX: {
+		case PFX_HARD_OBSTACLE: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
-				p->kind = HARD_OBSTACLE_PFX;
+				p->kind = PFX_HARD_OBSTACLE;
 				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_friction | PARTICLE_FLAGS_fade_out_with_velocity;
 				p->pos = pos;
 				p->col = color;
@@ -336,10 +372,10 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->size = v2(3, 3);
 			}
 		} break;
-		case SNOW_PFX: {
+		case PFX_SNOW: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
-				p->kind = SNOW_PFX;
+				p->kind = PFX_SNOW;
 				float z = get_random_float32_in_range(0, 20);
 				float a = float_alpha(z, 0, 20);
 				
@@ -361,7 +397,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 // -----------------------------------------------------------------------
 
 Entity* setup_player_entity(Entity* entity) {
-	entity->entitytype = PLAYER_ENTITY;
+	entity->entitytype = ENTITY_PLAYER;
 
 	entity->size = v2(50, 20);
 	entity->position = v2(0, -300);
@@ -379,7 +415,7 @@ Player* create_player() {
 	player->is_immune = false; // Spelaren är inte immun
 
     // Initialize the Entity part of the Player
-    player->entity = entity_create();
+    player->entity = create_entity();
     
     // Set up the player's entity attributes
     player->entity = setup_player_entity(player->entity);  // Assuming setup_player handles the initial setup of the Entity
@@ -396,29 +432,8 @@ Player* create_player() {
     return player;
 }
 
-Boss* create_boss() {
-	Boss* boss = 0;
-	boss = alloc(get_heap_allocator(), sizeof(Boss));
-	memset(boss, 0, sizeof(Boss));
-
-	boss->entity = entity_create();
-	boss->entity->entitytype = BOSS_ENTITY;
-	boss->entity->health = 10;
-	boss->entity->start_health = boss->entity->health;
-	boss->entity->color = rgba(165, 242, 243, 255);
-	boss->entity->size = v2(50, 50);
-	boss->entity->start_size = boss->entity->size;
-
-	TimedEvent* timed_event = initialize_boss_movement_event(world);
-	TimedEvent* attack_event = initialize_boss_attack_event(world);
-	boss->entity->timer = timed_event;
-	boss->entity->second_timer = attack_event;
-
-	return boss;
-}
-
 void summon_projectile_player(Entity* entity, Player* player) {
-	entity->entitytype = PROJECTILE_ENTITY;
+	entity->entitytype = ENTITY_PROJECTILE;
 
 	int setup_y_offset = 20;
 	entity->size = v2(10, 10);
@@ -431,7 +446,7 @@ void summon_projectile_player(Entity* entity, Player* player) {
 }
 
 void summon_projectile_drop(Entity* entity, Entity* obstacle) {
-	entity->entitytype = PROJECTILE_ENTITY;
+	entity->entitytype = ENTITY_PROJECTILE;
 
 	entity->size = v2(10, 10);
 	entity->health = 1;
@@ -441,69 +456,89 @@ void summon_projectile_drop(Entity* entity, Entity* obstacle) {
 	entity->velocity = v2(0, -50);
 }
 
-void setup_power_up(Entity* entity) {
-	entity->entitytype = POWERUP_ENTITY;
-	entity->power_up_spawn = POWER_UP_SPAWN_WORLD;
+void summon_icicle(Entity* entity, Vector2 spawn_pos) {
+	entity->entitytype = ENTITY_PROJECTILE;
 
-	int size = 25;
-	entity->size = v2(size, size);
+	entity->size = v2(10, 10);
 	entity->health = 1;
-	number_of_power_ups++;
+	entity->max_bounces = 100;
+	entity->position = spawn_pos;
+	entity->color = rgba(200, 233, 233, 255);
+	entity->velocity = v2(0, -200);
+}
+
+Effect* generate_random_effect() {
+	Effect* effect = create_effect();
 
 	float random_value = get_random_float64_in_range(0, 1);
-	float n_powerups = 5;
-	if (random_value < 1/n_powerups)
+	float n_effects = 5;
+
+	effect->effect_duration = 4.0f;
+
+	if (random_value < 1/n_effects)
 	{
-		entity->power_up_type = EXPAND_POWER_UP;
-		entity->color = COLOR_BLUE;
+		effect->effect_type = EFFECT_EXPAND_PLAYER;
+		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
+		
 	} 
-	else if (random_value < 2/n_powerups)
+	else if (random_value < 2/n_effects)
 	{
-		entity->power_up_type = IMMORTAL_BOTTOM_POWER_UP;
-		entity->color = COLOR_GREEN;
+		effect->effect_type = EFFECT_IMMORTAL_BOTTOM;
+		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
 	} 
-	else if (random_value < 3/n_powerups)
+	else if (random_value < 3/n_effects)
 	{
-		entity->power_up_type = IMMORTAL_TOP_POWER_UP;
-		entity->color = v4(1, 1, 0, 1);
+		effect->effect_type = EFFECT_IMMORTAL_TOP;
+		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
 	} 
-	else if (random_value < 4/n_powerups)
+	else if (random_value < 4/n_effects)
 	{
-		entity->power_up_type = HEALTH_POWER_UP;
-		entity->color = COLOR_RED;
+		effect->effect_type = EFFECT_EXTRA_HEALTH;
+		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
 	}
 	else
 	{
-		entity->power_up_type = SPEED_POWER_UP;
-		entity->color = v4(0, 1, 1, 1);
+		effect->effect_type = EFFECT_SPEED_PLAYER;
+		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
 	}
+
+	return effect;
 }
 
-void summon_power_up_drop(Entity* obstacle) {
-	Entity* entity = entity_create();
-	setup_power_up(entity);
-	entity->position = obstacle->position;
-	entity->power_up_spawn = POWER_UP_SPAWN_IN_OBSTACLE;
+void setup_boss(Entity* entity) {
+	entity->entitytype = ENTITY_BOSS;
+
+	entity->health = 10;
+	entity->start_health = entity->health;
+	entity->color = rgba(165, 242, 243, 255);
+	entity->size = v2(50, 50);
+	entity->start_size = entity->size;
+
+	TimedEvent* timed_event = initialize_boss_movement_event(world);
+	TimedEvent* attack_event = initialize_boss_attack_event(world);
+	entity->timer = timed_event;
+	entity->second_timer = attack_event;
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
-	entity->entitytype = OBSTACLE_ENTITY;
+	entity->entitytype = ENTITY_OBSTACLE;
 
 	int size = 21;
 	int padding = 10;
+	entity->health = 1;
 	entity->size = v2(size, size);
 	entity->grid_position = v2(x_index, y_index);
 	entity->position = v2(-180, -45);
 	entity->position = v2_add(entity->position, v2(x_index*(size + padding), y_index*(size + padding)));
 	
-	// TODO: Make it more clear which block is harder
+	// TODO: Make it more clear what each block does
+
 	float random_value = get_random_float64_in_range(0, 1);
 
 	// Check for Drop Obstacle (20% chance)
 	if (random_value <= SPAWN_RATE_DROP_OBSTACLE) 
 	{
-		entity->obstacle_type = DROP_OBSTACLE;
-		entity->health = 1;
+		entity->obstacle_type = OBSTACLE_DROP;
 		entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
 		entity->drop_duration_time = get_random_float32_in_range(3.0f, 5.0f);
 		entity->drop_interval_timer = 0;
@@ -512,38 +547,29 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	// Check for Hard Obstacle (next 20% chance, i.e., 0.2 < random_value <= 0.4)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE) 
 	{
-		entity->obstacle_type = HARD_OBSTACLE;
+		entity->obstacle_type = OBSTACLE_HARD;
 		entity->health = 2;
 	} 
 	// Check for Block Obstacle (next 10% chance, i.e., 0.4 < random_value <= 0.5)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) 
 	{
-		entity->obstacle_type = BLOCK_OBSTACLE;
+		entity->obstacle_type = OBSTACLE_BLOCK;
 		entity->health = 9999;
 		entity->size = v2(30, 30);
 
 		number_of_block_obstacles++;
 	} 
-	// If none of the above, spawn the Base Obstacle (remaining 50%)
-	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE + SPAWN_RATE_POWERUP_OBSTACLE)
-	{
-		entity->obstacle_type = POWERUP_OBSTACLE;
-		entity->health = 1;
-		entity->size = v2(28, 28);
-	}
-	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE + SPAWN_RATE_POWERUP_OBSTACLE) {
-        entity->obstacle_type = BEAM_OBSTACLE;
+	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
+        entity->obstacle_type = OBSTACLE_BEAM;
 		TimedEvent* timed_event = initialize_beam_event(world);
 		entity->timer = timed_event;
-        entity->health = 1;  // Strålen kan inte förstöras
         entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
         entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
         entity->drop_interval_timer = 0.0f;
     }
 	else 
 	{
-		entity->obstacle_type = BASE_OBSTACLE;
-		entity->health = 1;
+		entity->obstacle_type = OBSTACLE_BASE;
 		float red = 1 - (float)(x_index+1) / GRID_WIDTH;
 		float blue = (float)(x_index+1) / GRID_WIDTH;
 		entity->color = v4(red, 0, blue, 1);
@@ -563,18 +589,74 @@ void setup_beam(Entity* beam_obstacle, Entity* beam) {
 	beam->position = v2(beam_obstacle->position.x, beam_y_position);
 }
 
+void setup_effect_entity(Entity* entity, Entity* obstacle) {
+	entity->entitytype = ENTITY_EFFECT;
+
+	entity->health = 1;
+	entity->start_health = entity->health;
+	entity->color = rgba(165, 242, 243, 255);
+	entity->size = v2(20, 20);
+	entity->start_size = entity->size;
+	entity->position = obstacle->position;
+}
+
+Effect* setup_effect() {
+	Effect* effect = create_effect();
+	effect = generate_random_effect();
+	TimedEvent* timed_event = initialize_effect_event(world, effect->effect_duration);
+	effect->timer = timed_event;
+
+	return effect;
+}
+
 // void summon_world() needs the be furthers down since it might use 
 // some of the functions above when summoning the world.
 void summon_world(float spawn_rate) {
 	for (int x = 0; x < GRID_WIDTH; x++) { // x
 		for (int y = 0; y < GRID_HEIGHT; y++) { // y
 			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
-				Entity* entity = entity_create();
+				Entity* entity = create_entity();
 				setup_obstacle(entity, x, y);
 			}
 		}
 	}
 }
+
+// -----------------------------------------------------------------------
+//                        EFFECT FUNCTIONS
+// -----------------------------------------------------------------------
+
+// TODO: Varje effect behöver en egen timer
+
+void apply_effect(Effect* effect) {
+	switch(effect->effect_type) 
+	{
+		case(EFFECT_IMMORTAL_TOP): {
+			break;
+		} break;
+
+		case(EFFECT_IMMORTAL_BOTTOM): {
+			break;
+		} break;
+
+		case(EFFECT_EXPAND_PLAYER): {
+			player->entity->size = v2_add(player->entity->size, v2(30, 0));
+		} break;
+		
+		case(EFFECT_EXTRA_HEALTH): {
+			if (number_of_shots_missed > 0) {
+				number_of_shots_missed--;
+			}
+		} break;
+
+		case(EFFECT_SPEED_PLAYER): {
+			projectile_speed += 50;
+		} break;
+
+		default: { log("Something went wrong with effects!"); } break;
+	}
+}
+
 
 // -----------------------------------------------------------------------
 //                     UNCATEGORIZED FUNCTIONS
@@ -615,7 +697,7 @@ bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, in
                 found = 1;  // We found a tile at (x, i)
                 
                 // If the obstacle is not clear (i.e., not NULL), return 0
-                if (obstacle_list[j].obstacle != NULL && obstacle_list[j].obstacle->obstacle_type != NIL_OBSTACLE) {
+                if (obstacle_list[j].obstacle != NULL && obstacle_list[j].obstacle->obstacle_type != OBSTACLE_NIL) {
                     return false;  // If the obstacle is not destroyed, return 0
                 }
                 break;  // Break the inner loop once we've found the tile
@@ -633,23 +715,21 @@ void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		TimedEvent* timer = &world->timedevents[i];
-		if (entity->entitytype == OBSTACLE_ENTITY && entity->is_valid) {
-			entity_destroy(entity);
+		if (entity->entitytype == ENTITY_OBSTACLE && entity->is_valid) {
+			destroy_entity(entity);
 		}
-		if (entity->entitytype == BOSS_ENTITY && entity->is_valid) {
-			entity_destroy(entity);
+		if (entity->entitytype == ENTITY_BOSS && entity->is_valid) {
+			destroy_entity(entity);
 		}
-		if (!(timer->worldtype == WORLD_TIMER) && timer->is_valid) {
-			timedevent_destroy(timer);
+		if (!(timer->worldtype == TIMED_EVENT_TYPE_WORLD) && timer->is_valid) {
+			destroy_timedevent(timer);
 		}
-	}
-	// Iterate over the obstacle list and destroy each obstacle
-    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-        if (world->obstacle_list[i].obstacle != NULL) {
-            entity_destroy(world->obstacle_list[i].obstacle);  // Destroy the obstacle
+		if (world->obstacle_list[i].obstacle != NULL) {
+            destroy_entity(world->obstacle_list[i].obstacle);  // Destroy the obstacle
             world->obstacle_list[i].obstacle = NULL;           // Nullify the reference
         }
-    }
+	}
+
 	obstacle_count = 0;
 	number_of_block_obstacles = 0;
 }
@@ -657,10 +737,10 @@ void clean_world() {
 void projectile_bounce(Entity* projectile, Entity* obstacle) {
 	projectile->n_bounces++;
 	if (projectile->n_bounces >= projectile->max_bounces) {
-		entity_destroy(projectile);
+		destroy_entity(projectile);
 		return;
 	}
-	particle_emit(projectile->position, COLOR_WHITE, 10, BOUNCE_PFX);
+	particle_emit(projectile->position, COLOR_WHITE, 10, PFX_BOUNCE);
 
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
 	if (fabsf(pos_diff.x) > fabsf(pos_diff.y)) 
@@ -678,10 +758,10 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 void projectile_bounce_world(Entity* projectile) {
 	projectile->n_bounces++;
 	if (projectile->n_bounces >= projectile->max_bounces) {
-		entity_destroy(projectile);
+		destroy_entity(projectile);
 		return;
 	}
-	particle_emit(projectile->position, COLOR_WHITE, 10, BOUNCE_PFX);
+	particle_emit(projectile->position, COLOR_WHITE, 10, PFX_BOUNCE);
 	
 	projectile->position = v2_add(projectile->position, v2_mulf(projectile->velocity, -1 * delta_t)); // go back 
 	projectile->velocity = v2_mul(projectile->velocity, v2(-1,  1)); // Bounce x-axis
@@ -714,14 +794,19 @@ void apply_damage(Entity* entity, float damage) {
 	entity->health -= damage;
 
 	if (entity->health <= 0) {
-		if (entity->entitytype == OBSTACLE_ENTITY) {
+		if (entity->entitytype == ENTITY_EFFECT) {
+			Effect* effect = setup_effect();
+		}
+		if (entity->entitytype == ENTITY_OBSTACLE) {
 			number_of_destroyed_obstacles ++;
-			propagate_wave(entity);
+			//propagate_wave(entity);
+			//float random_value_for_effect = get_random_float64_in_range(0, 1);
 
-			if (entity->obstacle_type == POWERUP_OBSTACLE) {
-				summon_power_up_drop(entity);
-			} 
-
+			
+			Entity* effect_entity = create_entity();
+			setup_effect_entity(effect_entity, entity);
+			
+			
 			// Get the grid position of the obstacle from the entity
 			Vector2 position = entity->grid_position;
 			int x = position.x;
@@ -730,7 +815,7 @@ void apply_damage(Entity* entity, float damage) {
 			// Find the corresponding tuple in world->obstacle_list and nullify the obstacle
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				if (world->obstacle_list[i].x == x && world->obstacle_list[i].y == y) {
-					entity_destroy(world->obstacle_list[i].obstacle);  // Nullify the obstacle
+					destroy_entity(world->obstacle_list[i].obstacle);  // Nullify the obstacle
 					world->obstacle_list[i].x = 0;
 					world->obstacle_list[i].y = 0;
 					obstacle_count--;
@@ -740,7 +825,7 @@ void apply_damage(Entity* entity, float damage) {
 		}
 		else
 		{
-			entity_destroy(entity);
+			destroy_entity(entity);
 		}
 	}
 }
@@ -770,11 +855,51 @@ bool boss_is_alive(World* world) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
 
-		if (entity->entitytype == BOSS_ENTITY) {
+		if (entity->entitytype == ENTITY_BOSS) {
 			return true;
 		}
 	}
 	return false;
+}
+
+void timed_event_info(TimedEvent* te, int index, float* y_offset) {
+    // Only proceed if the TimedEvent is valid
+    if (!te->is_valid) return;
+
+    // Start the string with basic info
+    string temp = sprintf(get_temporary_allocator(), "TimedEvent %d - Type: %d", index, te->type);
+
+    // Append other parameters conditionally
+    if (te->interval != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Interval: %.2f"), temp, te->interval);
+    }
+    if (te->interval_timer != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, I-timer: %.2f"), temp, te->interval_timer);
+    }
+    if (te->duration != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Duration: %.2f"), temp, te->duration);
+    }
+    if (te->duration_timer != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, D-timer: %.2f"), temp, te->duration_timer);
+    }
+    if (te->progress != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Progress: %.2f"), temp, te->progress);
+    }
+    if (te->counter <= 0) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Counter: %d"), temp, te->counter);
+    }
+
+    // Display the final constructed string at the current y_offset
+    draw_text(font_light, 
+        temp, 
+        font_height, 
+        v2(-window.width / 2, window.height / 2 - 200 - *y_offset),  // Adjust y-position based on y_offset
+        v2(0.4, 0.4), 
+        COLOR_GREEN
+    );
+
+    // Increase the y_offset for the next valid TimedEvent
+    *y_offset += 25;  // Increase this value to adjust the vertical spacing between events
 }
 
 // -----------------------------------------------------------------------
@@ -838,151 +963,28 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
     int damage = 1.0f; // This can be changes in the future
 	
-	if (obstacle->obstacle_type == BLOCK_OBSTACLE) 
+	if (obstacle->obstacle_type == OBSTACLE_BLOCK) 
 	{
 		projectile_bounce(projectile, obstacle);
 		play_one_audio_clip(STR("res/sound_effects/thud1.wav"));
 	} 
 	else
 	{
-		if (!(obstacle->entitytype == PLAYER_ENTITY)) apply_damage(obstacle, damage);
-		entity_destroy(projectile);
+		if (!(obstacle->entitytype == ENTITY_PLAYER)) { apply_damage(obstacle, damage); }
+		destroy_entity(projectile);
 		play_random_blop_sound();
 	}
 }
 
 void handle_beam_collision(Entity* beam, Entity* player) {
+	// TODO: Implement a timer so player gets damaged slowly
 	int damage = 1.0f; // This can be changes in the future
 	number_of_shots_missed++;
 }
 
 // -----------------------------------------------------------------------
-//                        POWERUP FUNCTIONS
-// -----------------------------------------------------------------------
-
-// TODO: Det här kommer inte funka. Varje powerup behöver en egen timer. Här delar
-// alla powerups samma timer, så om du hinner få en powerup innan timern börjar om
-// så tappar du inte din powerup!
-
-void apply_power_up(Entity* power_up, Player* player) {
-	switch(power_up->power_up_type) 
-	{
-		case(IMMORTAL_BOTTOM_POWER_UP): {
-			mercy_bottom = true;
-			is_power_up_active = true;
-			timer_power_up = 5.0f;
-		} break;
-
-		case(IMMORTAL_TOP_POWER_UP): {
-			mercy_top = true;
-			is_power_up_active = true;
-			timer_power_up = 5.0f;
-		} break;
-
-		case(EXPAND_POWER_UP): {
-			player->entity->size = v2_add(player->entity->size, v2(30, 0));
-			is_power_up_active = true;
-			timer_power_up = 5.0f;
-		} break;
-		
-		case(HEALTH_POWER_UP): {
-			if (number_of_shots_missed > 0) {
-				number_of_shots_missed--;
-			}
-		} break;
-
-		case(SPEED_POWER_UP): {
-			projectile_speed += 50;
-		} break;
-
-		default: { log("Something went wrong with powerups!"); } break;
-	}
-}
-
-void update_power_up_timer(Player* player, float delta_t) {
-    // Kontrollera om power-upen är aktiv
-    if (is_power_up_active) {
-        timer_power_up -= delta_t;
-		// Återställ effekten när timern når 0
-        if (timer_power_up <= 0 && IMMORTAL_BOTTOM_POWER_UP) {
-            mercy_bottom = false;  // Återställ till standardfärg
-            is_power_up_active = false;  // Deaktivera power-upen
-        }
-		if (timer_power_up <= 0 && IMMORTAL_TOP_POWER_UP) {
-            mercy_top = false; 
-            is_power_up_active = false;  
-        }
-		if (timer_power_up <= 0 && EXPAND_POWER_UP) {
-            player->entity->size = v2_sub(player->entity->size, v2(10, 0));
-            is_power_up_active = false; 
-		}
-    }
-}
-
-// -----------------------------------------------------------------------
 //                         PLAYER FUNCTIONS
 // -----------------------------------------------------------------------
-
-void update_player_debuffs(Player* player, float delta_t) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (player->player_debuffs[i].is_active) {
-            // Endast öka tid om det inte är en permanent debuff
-            if (player->player_debuffs[i].duration > 0) {
-                player->player_debuffs[i].elapsed_time += delta_t;
-
-                // Kolla om debuffens tid är slut
-                if (player->player_debuffs[i].elapsed_time >= player->player_debuffs[i].duration) {
-                    player->player_debuffs[i].is_active = false;  // Inaktivera debuffen
-                    player->player_debuffs[i].debuff_type = NIL_DEBUFF;  // Ingen debuff
-                }
-            }
-        }
-    }
-}
-
-void update_player_immunity(Player* player, float delta_t) {
-    if (player->is_immune) {
-        player->immunity_timer -= delta_t; // Minska immunitetstimer
-        if (player->immunity_timer <= 0.0f) {
-            player->is_immune = false; // Immunitetens tid är slut
-            player->immunity_timer = 0.0f; // Återställ timern
-        }
-    }
-}
-
-void apply_debuff_to_player(Player* player, DebuffType debuff_type, float duration) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (!player->player_debuffs[i].is_active) {
-            player->player_debuffs[i].debuff_type = debuff_type;
-            player->player_debuffs[i].is_active = true;
-            player->player_debuffs[i].duration = duration;
-            player->player_debuffs[i].elapsed_time = 0.0f;
-            break;
-        }
-    }
-}
-
-void apply_debuff_effects(Player* player) {
-    for (int i = 0; i < MAX_DEBUFF_COUNT; i++) {
-        if (player->player_debuffs[i].is_active) {
-            switch (player->player_debuffs[i].debuff_type) {
-                case DEBUFF_SLOW_PLAYER:
-                    player->max_speed *= 0.5f;  // Halvera spelarens hastighet om slow-debuffen är aktiv
-                    break;
-				
-				case DEBUFF_SLOW_PROJECTILE: //Projectile är inte med i struct player...
-                    break;
-
-                case DEBUFF_WEAKNESS: //Tänkte ha att man skadar 50% av vad man tidigare gjorde men måste ändra health till float då
-                    break;
-
-                case NIL_DEBUFF:
-                default:
-                    break;
-            }
-        }
-    }
-}
 
 void update_player_position(Player* player, float delta_t) {
     Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
@@ -1076,14 +1078,55 @@ void limit_player_position(Player* player, float delta_t){
 }
 
 // -----------------------------------------------------------------------
+//                   UPDATE FUNCTIONS FOR UPDATE LOOP
+// -----------------------------------------------------------------------
+void update_boss(Entity* entity, float delta_t) {
+	if (timer_finished(entity->second_timer)) {
+		Entity* p1 = create_entity();
+		Entity* p2 = create_entity();
+		summon_icicle(p1, v2_add(entity->position, v2(entity->size.x, 0)));
+		summon_icicle(p2, v2_sub(entity->position, v2(entity->size.x, 0)));
+	}
+}
+
+Vector2 update_boss_velocity(Vector2 velocity, float t) {
+    // Example of modifying the velocity based on a sine wave
+    float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
+    float new_velocity_x = velocity_amplitude * (sin(t) + 0.5f * sin(2.0f * t)); // Modify x velocity
+    float new_velocity_y = velocity_amplitude * (sin(t + 0.5f) + 0.3f * sin(3.0f * t)); // Modify y velocity
+
+    return v2(new_velocity_x, new_velocity_y); // Return updated velocity
+}
+
+void update_wave_effect(Entity* entity) {
+	if (!(is_game_paused)) entity->wave_time -= delta_t;
+
+	if (entity->wave_time < 0.0f) {
+		entity->wave_time = 0.0f;
+	}
+	float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
+	float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
+	
+	// Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
+	float extra_size = 5.0f;
+
+	float size_value = extra_size * easeOutBounce(normalized_wave_time);
+	if (size_value >= extra_size * 0.5) {
+		size_value = extra_size * easeOutBounce(entity->wave_time_beginning - normalized_wave_time);
+	}
+
+	entity->size = v2_add(entity->start_size, v2(size_value, size_value));
+}
+
+// -----------------------------------------------------------------------
 //                   DRAW FUNCTIONS FOR DRAW LOOP
 // -----------------------------------------------------------------------
 
 void draw_beam(Entity* entity, float delta_t) {
 	
-	if (timer_finished(entity->timer, delta_t)) {
+	if (timer_finished(entity->timer)) {
 		if (entity->child == NULL) {
-			Entity* beam = entity_create();
+			Entity* beam = create_entity();
 			setup_beam(entity, beam);
 			entity->child = beam;
 		}
@@ -1094,7 +1137,7 @@ void draw_beam(Entity* entity, float delta_t) {
 		}
 	} else {
 		if (entity->child != NULL) {
-			entity_destroy(entity->child);
+			destroy_entity(entity->child);
 			entity->child = NULL;
 		}
 	}
@@ -1117,7 +1160,7 @@ void draw_playable_area_borders() {
 	draw_line(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE);
 }
 
-void draw_death_borders(TimedEvent* timedevent, float delta_t) {
+void draw_death_borders(TimedEvent* timedevent) {
 
 	// Use uint32_t instead of s64
 	uint32_t lava_colors[5] = {
@@ -1133,7 +1176,7 @@ void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 		rgba_colors[i] = hex_to_rgba(lava_colors[i]);
 	}
 
-	if (timer_finished(timedevent, delta_t)) {
+	if (timer_finished(timedevent)) {
 		if (timedevent->counter == 4) {
 			timedevent->counter = 0;
 		}
@@ -1149,7 +1192,7 @@ void draw_death_borders(TimedEvent* timedevent, float delta_t) {
 
 }
 
-void draw_hearts(int number_of_hearts, int number_of_shots_missed, Gfx_Image* heart_sprite) {
+void draw_hearts() {
     int heart_size = 50;
     int heart_padding = 0;
     
@@ -1217,38 +1260,9 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     return pressed;
 }
 
-Vector2 update_boss_velocity(Vector2 velocity, float t) {
-    // Example of modifying the velocity based on a sine wave
-    float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
-    float new_velocity_x = velocity_amplitude * (sin(t) + 0.5f * sin(2.0f * t)); // Modify x velocity
-    float new_velocity_y = velocity_amplitude * (sin(t + 0.5f) + 0.3f * sin(3.0f * t)); // Modify y velocity
-
-    return v2(new_velocity_x, new_velocity_y); // Return updated velocity
-}
-
-void summon_icicle(Entity* entity, Vector2 spawn_pos) {
-	entity->entitytype = PROJECTILE_ENTITY;
-
-	entity->size = v2(10, 10);
-	entity->health = 1;
-	entity->max_bounces = 100;
-	entity->position = spawn_pos;
-	entity->color = rgba(200, 233, 233, 255);
-	entity->velocity = v2(0, -200);
-}
-
-void update_boss(Entity* entity, float delta_t) {
-	if (timer_finished(entity->second_timer, delta_t)) {
-		Entity* p1 = entity_create();
-		Entity* p2 = entity_create();
-		summon_icicle(p1, v2_add(entity->position, v2(entity->size.x, 0)));
-		summon_icicle(p2, v2_sub(entity->position, v2(entity->size.x, 0)));
-	}
-}
-
 void draw_boss(Entity* entity, float t, float delta_t) {
     // Update the velocity based on the timer
-    if (timer_finished(entity->timer, delta_t)) {
+    if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_velocity(entity->velocity, t);
     }
     // Amplitudes for the movement (lower values for more subtle movement)
@@ -1265,12 +1279,12 @@ void draw_boss(Entity* entity, float t, float delta_t) {
     draw_centered_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color);
 }
 
-void draw_boss_health_bar(World* world, Gfx_Font* font) {
+void draw_boss_health_bar() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
 		
-		if (entity->entitytype == BOSS_ENTITY) {
+		if (entity->entitytype == ENTITY_BOSS) {
 			float health_bar_height = 50;
 			float health_bar_width = 150;
 			float padding = 15;
@@ -1280,13 +1294,29 @@ void draw_boss_health_bar(World* world, Gfx_Font* font) {
 			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
 			string label = sprint(get_temporary_allocator(), STR("%i"), entity->health);
 			u32 font_height = 48;
-			Gfx_Text_Metrics m = measure_text(font, label, font_height, v2(1, 1));
-			draw_text(font, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
+			Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+			draw_text(font_bold, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
 		}
 	}
 }
 
-void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
+void draw_effect_ui() {
+	for (int i=0; i <= MAX_EFFECT_COUNT; i++) {
+		Effect* effect = &world->effects[i];
+		if (!(effect->is_valid)) { continue; }
+
+		if (!(effect->timer == NULL)) {
+			draw_text(font_bold, sprint(get_temporary_allocator(), STR("Effect Type: %i"), effect->effect_type), font_height, v2(0, 0), v2(0.4, 0.4), COLOR_WHITE);
+		
+			if (timer_finished(effect->timer)) {
+				destroy_timedevent(effect->timer);
+				destroy_effect(effect);
+			}
+		}
+	}
+}
+
+void draw_main_menu() {
 	if (is_main_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
 		
@@ -1319,13 +1349,12 @@ void draw_main_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	}
 }
 
-void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
+void draw_settings_menu() {
 	if (is_settings_menu_active) {
 		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
 
 		// Create the label using sprint
 		string label = sprint(get_temporary_allocator(), STR("Settings"));
-		u32 font_height = 48;
 		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
 		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
 
@@ -1355,50 +1384,10 @@ void draw_settings_menu(Gfx_Font* font_light, Gfx_Font* font_bold) {
 	}
 }
 
-void display_timed_event_info(TimedEvent* te, int index, float font_height, Gfx_Font* font_light, float* y_offset) {
-    // Only proceed if the TimedEvent is valid
-    if (!te->is_valid) return;
-
-    // Start the string with basic info
-    string temp = sprintf(get_temporary_allocator(), "TimedEvent %d - Type: %d", index, te->type);
-
-    // Append other parameters conditionally
-    if (te->interval != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, Interval: %.2f"), temp, te->interval);
-    }
-    if (te->interval_timer != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, I-timer: %.2f"), temp, te->interval_timer);
-    }
-    if (te->duration != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, Duration: %.2f"), temp, te->duration);
-    }
-    if (te->duration_timer != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, D-timer: %.2f"), temp, te->duration_timer);
-    }
-    if (te->progress != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, Progress: %.2f"), temp, te->progress);
-    }
-    if (te->counter <= 0) {
-        temp = sprint(get_temporary_allocator(), STR("%s, Counter: %d"), temp, te->counter);
-    }
-
-    // Display the final constructed string at the current y_offset
-    draw_text(font_light, 
-        temp, 
-        font_height, 
-        v2(-window.width / 2, window.height / 2 - 200 - *y_offset),  // Adjust y-position based on y_offset
-        v2(0.4, 0.4), 
-        COLOR_GREEN
-    );
-
-    // Increase the y_offset for the next valid TimedEvent
-    *y_offset += 25;  // Increase this value to adjust the vertical spacing between events
-}
-
-void render_timed_events(World* world, float font_height, Gfx_Font* font_light) {
+void draw_timed_events() {
     float y_offset = 0;  // Initialize y_offset to zero
     for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-        display_timed_event_info(&world->timedevents[i], i, font_height, font_light, &y_offset);
+        timed_event_info(&world->timedevents[i], i, &y_offset);
     }
 }
 
@@ -1413,19 +1402,20 @@ void stage_0_to_9() {
 	world->world_background = v4(r, g, b, 1.0f); // Background color
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
-	int n_snow_particles = number_of_certain_particle(SNOW_PFX);
-	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, SNOW_PFX);
+	int n_snow_particles = number_of_certain_particle(PFX_SNOW);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, PFX_SNOW);
 }
 
 void stage_10_boss() {
-	Boss* boss = create_boss();
+	Entity* boss = create_entity();
+	setup_boss(boss);
 
-	int n_snow_particles = number_of_certain_particle(SNOW_PFX);
-	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, SNOW_PFX);
+	int n_snow_particles = number_of_certain_particle(PFX_SNOW);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, PFX_SNOW);
 }
 
 void stage_11_to_19() {
-	remove_all_particle_type(SNOW_PFX);
+	remove_all_particle_type(PFX_SNOW);
 	float stage_progress = current_stage_level - 10;
 	float r = stage_progress / 20.0f;
 	float g = 0.0f;
@@ -1454,9 +1444,120 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	} 
 	else 
 	{
-		remove_all_particle_type(SNOW_PFX);
+		remove_all_particle_type(PFX_SNOW);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
+}
+
+// -----------------------------------------------------------------------
+//                   FUNCTION FOR DRAWING THE ENTIRE GAME
+// -----------------------------------------------------------------------
+
+void draw_game() {
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		if (!entity->is_valid) continue;
+
+		if (entity->obstacle_type == OBSTACLE_BEAM)
+		{
+			draw_beam(entity, delta_t);
+		}
+
+		if (entity->entitytype == ENTITY_EFFECT)
+		{
+			float a = 0.2 * sin(7*now) + 0.8;
+			Vector4 col = entity->color;
+			entity->color = v4(col.x, col.y, col.z, a);
+
+			draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
+			draw_centered_circle(entity->position, entity->size, entity->color);
+		}
+
+		if (entity->entitytype == ENTITY_PROJECTILE)
+		{
+			draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
+			draw_centered_circle(entity->position, entity->size, entity->color);
+		}
+	
+		if (entity->entitytype == ENTITY_OBSTACLE)
+		{
+			switch(entity->obstacle_type) 
+			{
+				case(OBSTACLE_DROP): {
+					entity->color = v4(1, 1, 1, 0.3);
+				} break;
+				case(OBSTACLE_BEAM): {
+					entity->color = v4(0, 1, 0, 0.3);
+				} break;
+				case(OBSTACLE_HARD):
+					float r = 0.5 * sin(now + 3*PI32) + 0.5;
+					entity->color = v4(r, 0, 1, 1);
+					break;
+				case(OBSTACLE_BLOCK):
+					float a = 0.3 * sin(2*now) + 0.7;
+					entity->color = v4(0.2, 0.2, 0.2, a);
+					break;
+		
+				default: { } break; 
+			}
+
+			draw_rounded_centered_rect(entity->position, entity->size, entity->color, 0.1);
+		}
+	
+		if (entity->entitytype == ENTITY_EFFECT) 
+		{
+			draw_centered_circle(entity->position, entity->size, entity->color);
+		}
+	}
+
+	// When a stage is cleared this is runned
+	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
+		current_stage_level++;
+		initialize_new_stage(world, current_stage_level);
+		window.clear_color = world->world_background;
+	}
+
+	if (!(is_game_paused)) { particle_update(); }
+	
+	int number_of_particles = particle_render();
+	
+	if (debug_mode) {
+		draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
+		draw_timed_events();
+	}
+	
+	// Check if game is over or not
+	game_over = number_of_shots_missed >= number_of_hearts;
+
+	if (game_over) {
+		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
+		current_stage_level = 0;
+		number_of_shots_missed = 0;
+		clean_world();
+		remove_all_particle_type(PFX_SNOW);
+		summon_world(SPAWN_RATE_ALL_OBSTACLES);
+		draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
+	}
+	
+	draw_hearts();
+
+	draw_boss_health_bar();
+
+	draw_playable_area_borders();
+
+	draw_death_borders(color_switch_event);
+
+	draw_effect_ui();
+
+	draw_settings_menu();
+
+	draw_main_menu();
 }
 
 int entry(int argc, char **argv) {
@@ -1472,45 +1573,42 @@ int entry(int argc, char **argv) {
 
 	float64 seconds_counter = 0.0;
 	s32 frame_count = 0;
-	int latest_fps;
-	int latest_entites;
-	const u32 font_height = 48;
 	float64 last_time = os_get_elapsed_seconds();
 
 	world = alloc(get_heap_allocator(), sizeof(World));
 	memset(world, 0, sizeof(World));
 
 	// Load in images and other stuff from disk
-	Gfx_Font *font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
+	font_light = load_font_from_disk(STR("./res/fonts/Abaddon Light.ttf"), get_heap_allocator());
 	assert(font_light, "Failed loading './res/fonts/Abaddon Light.ttf'");
 
-	Gfx_Font *font_bold = load_font_from_disk(STR("./res/fonts/Abaddon Bold.ttf"), get_heap_allocator());
-	assert(font_light, "Failed loading './res/fonts/Abaddon Bold.ttf'");
+	font_bold = load_font_from_disk(STR("./res/fonts/Abaddon Bold.ttf"), get_heap_allocator());
+	assert(font_bold, "Failed loading './res/fonts/Abaddon Bold.ttf'");
 	
-	Gfx_Image* heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
+	heart_sprite = load_image_from_disk(STR("res/textures/heart.png"), get_heap_allocator());
 	assert(heart_sprite, "Failed loading 'res/textures/heart.png'");
 
-	Gfx_Image* power_up_heart_sprite = load_image_from_disk(STR("res/textures/powerup_heart.png"), get_heap_allocator());
-	assert(heart_sprite, "Failed loading 'res/textures/powerup_heart.png'");
+	effect_heart_sprite = load_image_from_disk(STR("res/textures/effect_heart.png"), get_heap_allocator());
+	assert(effect_heart_sprite, "Failed loading 'res/textures/effect_heart.png'");
 
 	// Here we create the player object
-	Player* player = create_player();
+	player = create_player();
 	
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	world->world_background = COLOR_BLACK;
 
 	// -----------------------------------------------------------------------
-	//                      WORLD TIMED EVENTS ARE MADE HERE
+	//                      WORLD TIMED TIMED_EVENTS ARE MADE HERE
 	// -----------------------------------------------------------------------
-	TimedEvent* color_switch_event = initialize_color_switch_event(world);
+	color_switch_event = initialize_color_switch_event(world);
 
 	while (!window.should_close) {
 		reset_temporary_storage();
 
 		// Time stuff
-		float64 now = os_get_elapsed_seconds();
+		now = os_get_elapsed_seconds();
 		
-		float64 delta_t = now - last_time;
+		delta_t = now - last_time;
 		last_time = now;
 
 		// Mouse Positions
@@ -1578,7 +1676,7 @@ int entry(int argc, char **argv) {
 			{
 				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
-				Entity* projectile = entity_create();
+				Entity* projectile = create_entity();
 				summon_projectile_player(projectile, player);
 
 				number_of_shots_fired++;
@@ -1588,14 +1686,13 @@ int entry(int argc, char **argv) {
 			{
 				consume_key_just_pressed(KEY_SPACEBAR);
 
-				Entity* projectile = entity_create();
+				Entity* projectile = create_entity();
 				summon_projectile_player(projectile, player);
 
 				number_of_shots_fired++;
 			}
 
 			update_player_position(player, delta_t);
-        	update_power_up_timer(player, delta_t);
 		}
 
 		// -----------------------------------------------------------------------
@@ -1611,7 +1708,7 @@ int entry(int argc, char **argv) {
 		}
 
 		// -----------------------------------------------------------------------
-		//              Entity Loop for drawing and everything else
+		//               Entity Loop for updating and collisions
 		// -----------------------------------------------------------------------
 
 		int entity_counter = 0;
@@ -1623,7 +1720,7 @@ int entry(int argc, char **argv) {
 			// Update positon from velocity of entity if game is not paused
 			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 			
-			if (entity->entitytype == PROJECTILE_ENTITY) 
+			if (entity->entitytype == ENTITY_PROJECTILE) 
 			{
 				bool collision = false;
 				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
@@ -1632,9 +1729,9 @@ int entry(int argc, char **argv) {
 					if (entity == other_entity) continue;
 					if (collision) break;
 					switch(other_entity->entitytype) {
-						case(PLAYER_ENTITY):
-						case(BOSS_ENTITY):
-						case(OBSTACLE_ENTITY):{
+						case(ENTITY_PLAYER):
+						case(ENTITY_BOSS):
+						case(ENTITY_OBSTACLE):{
 							if (circle_rect_collision(entity, other_entity)) 
 							{
 								handle_projectile_collision(entity, other_entity);
@@ -1642,22 +1739,24 @@ int entry(int argc, char **argv) {
 							} 
 						} break;
 
-						case(PROJECTILE_ENTITY): {
+						case(ENTITY_PROJECTILE): {
 							if (circle_circle_collision(entity, other_entity))
 							{
-								particle_emit(other_entity->position, other_entity->color, 4, POWERUP_PFX);
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
 								handle_projectile_collision(entity, other_entity);
 								collision = true;
 							}
 						} break;
 
-						case(POWERUP_ENTITY): {
+						case(ENTITY_EFFECT): {
 							if (circle_circle_collision(entity, other_entity)) 
 							{
-								particle_emit(other_entity->position, other_entity->color, 4, POWERUP_PFX);
-								apply_power_up(other_entity, player);
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
 								handle_projectile_collision(entity, other_entity);
-								number_of_power_ups--;
+
+								Effect* effect = create_effect();
+								apply_effect(effect);
+
 								collision = true;
 							}
 						} break;
@@ -1673,28 +1772,16 @@ int entry(int argc, char **argv) {
 					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
 				}
 
-				if (entity->position.y <= -window.height / 2)
+				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2)
 				{
-					if (!mercy_bottom){
-						number_of_shots_missed++;
-						play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
-					}
-					entity_destroy(entity);
-				}
-
-				if (entity->position.y >= window.height / 2)
-				{
-					if (!mercy_top) {
-						number_of_shots_missed++;
-						play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
-					}
-					entity_destroy(entity);
+					number_of_shots_missed++;
+					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
+					destroy_entity(entity);
 				}
 			}
 			
-			if (entity->obstacle_type == BEAM_OBSTACLE) 
+			if (entity->obstacle_type == OBSTACLE_BEAM) 
 			{
-				draw_beam(entity, delta_t);
 				if (entity->child != NULL) { // We have a beam
 					if (rect_rect_collision(entity->child, player->entity)) {
 						handle_beam_collision(entity->child, player->entity);
@@ -1702,51 +1789,9 @@ int entry(int argc, char **argv) {
 				}
 			}
 
-			if (entity->entitytype == POWERUP_ENTITY)
+			if (entity->entitytype == ENTITY_OBSTACLE) 
 			{
-				if (entity->power_up_spawn == POWER_UP_SPAWN_WORLD) {
-					float random_position_power_up = get_random_int_in_range(-PLAYABLE_WIDTH, PLAYABLE_WIDTH);
-					entity->position = v2((entity->size.x - (PLAYABLE_WIDTH / 2)) * sin(now + random_position_power_up), -100);
-				}
-				
-				float a = 0.2 * sin(7*now) + 0.8;
-				Vector4 col = entity->color;
-				entity->color = v4(col.x, col.y, col.z, a);
-
-				draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
-				draw_centered_circle(entity->position, entity->size, entity->color);
-			}
-
-			if (entity->entitytype == PROJECTILE_ENTITY)
-			{
-				draw_centered_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK);
-				draw_centered_circle(entity->position, entity->size, entity->color);
-			}
-
-			if (entity->entitytype == OBSTACLE_ENTITY) 
-			{
-				switch(entity->obstacle_type) 
-				{
-					case(DROP_OBSTACLE): {
-						entity->color = v4(1, 1, 1, 0.3);
-					} break;
-					case(BEAM_OBSTACLE): {
-						entity->color = v4(0, 1, 0, 0.3);
-					} break;
-					case(HARD_OBSTACLE):
-						float r = 0.5 * sin(now + 3*PI32) + 0.5;
-						entity->color = v4(r, 0, 1, 1);
-						break;
-					case(BLOCK_OBSTACLE):
-						float a = 0.3 * sin(2*now) + 0.7;
-						entity->color = v4(0.2, 0.2, 0.2, a);
-						break;
-					case(POWERUP_OBSTACLE):
-						entity->color = v4(0, 0, 1, 1);
-						break;
-					default: { } break; 
-				}
-				if (entity->obstacle_type == DROP_OBSTACLE) {
+				if (entity->obstacle_type == OBSTACLE_DROP) {
 					int x = entity->grid_position.x;
 					int y = entity->grid_position.y;
 					if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
@@ -1766,109 +1811,31 @@ int entry(int argc, char **argv) {
 						{
 							entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
 							entity->drop_interval_timer = 0.0f;
-							Entity* drop_projectile = entity_create();
+							Entity* drop_projectile = create_entity();
 							summon_projectile_drop(drop_projectile, entity);
 						}
 					}
 				}
 
-				if (entity->wave_time > 0.0f && entity->obstacle_type != BLOCK_OBSTACLE) {
-					if (!(is_game_paused)) entity->wave_time -= delta_t;
-
-					if (entity->wave_time < 0.0f) {
-						entity->wave_time = 0.0f;
-					}
-					float normalized_wave_time = entity->wave_time / entity->wave_time_beginning;
-					float wave_intensity = entity->wave_time / 0.1f;  // Intensity decreases with time
-					
-					// Vector4 diff_color = v4(1.0f, 0.0f, 0.0f, wave_intensity);  // Example: red wave effect
-					float extra_size = 5.0f;
-
-					float size_value = extra_size * easeOutBounce(normalized_wave_time);
-					if (size_value >= extra_size * 0.5) {
-						size_value = extra_size * easeOutBounce(entity->wave_time_beginning - normalized_wave_time);
-					}
-					Vector2 diff_size = v2_add(entity->size, v2(size_value, size_value));
-					
-					draw_rounded_centered_rect(entity->position, diff_size, entity->color, 0.1);
-				}
-				else
-				{
-					draw_rounded_centered_rect(entity->position, entity->size, entity->color, 0.1);
+				// Wave Effect
+				if (entity->wave_time > 0.0f && entity->obstacle_type != OBSTACLE_BLOCK) {
+					update_wave_effect(entity);
 				}
 			}
 
-			if (entity->entitytype == PLAYER_ENTITY) {
+			if (entity->entitytype == ENTITY_PLAYER) {
 				limit_player_position(player, delta_t);
 				draw_centered_rect(entity->position, entity->size, entity->color);
 			}
 
-			if (entity->entitytype == BOSS_ENTITY) {
+			if (entity->entitytype == ENTITY_BOSS) {
 				update_boss(entity, delta_t);
 				draw_boss(entity, now, delta_t);
 			}
 		}
 
-		
-		if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
-			current_stage_level++;
-			initialize_new_stage(world, current_stage_level);
-			window.clear_color = world->world_background;
-		}
+		draw_game();
 
-		if (!(is_game_paused)) { particle_update(delta_t); }
-		
-		int number_of_particles = particle_render();
-		
-		
-		if (debug_mode) {
-			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
-			
-			render_timed_events(world, font_height, font_light);
-			
-			for (int i = 0; i < MAX_ENTITY_COUNT; i++) { // Here we loop through every entity
-				Entity* entity = &world->entities[i];
-				if (!entity->is_valid) continue;
-				if (!(entity->entitytype == PLAYER_ENTITY) && !(entity->obstacle_type == BLOCK_OBSTACLE)) {
-					draw_text(font_light, sprint(get_temporary_allocator(), STR("%i"), entity->health), font_height, v2_sub(entity->position, v2_mulf(entity->size, 0.5)), v2(0.2, 0.2), COLOR_GREEN);
-				}	
-			}
-
-			
-		}
-		
-		// Check if game is over or not
-		game_over = number_of_shots_missed >= number_of_hearts;
-
-		if (game_over) {
-			//play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
-			current_stage_level = 0;
-			number_of_shots_missed = 0;
-			clean_world();
-			remove_all_particle_type(SNOW_PFX);
-			summon_world(SPAWN_RATE_ALL_OBSTACLES);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
-		}
-
-		draw_hearts(number_of_hearts, number_of_shots_missed, heart_sprite);
-
-		draw_boss_health_bar(world, font_bold);
-
-		draw_playable_area_borders();
-
-		draw_death_borders(color_switch_event, delta_t);
-
-		draw_settings_menu(font_light, font_bold);
-
-		draw_main_menu(font_light, font_bold);
-
-		
 		os_update();
 		gfx_update();
 

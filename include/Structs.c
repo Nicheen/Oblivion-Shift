@@ -2,11 +2,6 @@
 // Structs (typedef struct)
 // -----------------------------------------------------------------------
 
-typedef struct My_Cbuffer {
-	Vector2 mouse_pos_screen; // We use this to make a light around the mouse cursor
-	Vector2 window_size; // We only use this to revert the Y in the shader because for some reason d3d11 inverts it.
-} My_Cbuffer;
-
 typedef struct TimedEvent {
     bool is_valid;
 	TimedEventWorldType worldtype;
@@ -47,21 +42,15 @@ typedef struct Entity {
 	// Projectile
 	int n_bounces;
 	int max_bounces;
-	enum PowerUpType power_up_type;
-	enum PowerUpSpawn power_up_spawn;
 } Entity;
 
-typedef struct PowerUp{
-	enum PowerUpType power_up_type;
-	enum PowerUpSpawn power_up_spawn;
-} PowerUp;
-
-typedef struct Debuff{
-	enum DebuffType debuff_type;
-	bool is_active;
-	float duration;
-	float elapsed_time;
-} Debuff;
+typedef struct Effect{
+	bool is_valid;
+	TimedEvent* timer;
+	float effect_duration;
+	enum EffectType effect_type;
+	enum EffectSpawn effect_spawn;
+} Effect;
 
 typedef struct Player{
 	Entity* entity;
@@ -69,16 +58,9 @@ typedef struct Player{
 	float min_speed;
 	float max_bounce;
 	float damp_bounce;
-	Debuff player_debuffs[MAX_DEBUFF_COUNT];
-	PowerUp player_powerups[MAX_POWERUP_COUNT];
 	float immunity_timer;
     bool is_immune;
 } Player;
-
-typedef struct Boss {
-	Entity* entity;
-	// add more stuff here
-} Boss;
 
 typedef struct ObstacleTuple {
 	Entity* obstacle;
@@ -90,9 +72,7 @@ typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
     TimedEvent timedevents[MAX_ENTITY_COUNT];
-
-	Debuff world_debuffs[MAX_DEBUFF_COUNT];
-	PowerUp world_powerups[MAX_POWERUP_COUNT];
+	Effect effects[MAX_EFFECT_COUNT];
 
 	Vector4 world_background;
 } World;
