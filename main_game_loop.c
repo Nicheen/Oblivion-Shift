@@ -109,7 +109,7 @@ Effect* create_effect() {
 		}
 	}
 	assert(effect_found, "No more free effect slots!");
-	effect_found->is_valid = true;
+	effect_found->is_valid = true;		
 	return effect_found;
 }
 
@@ -372,6 +372,83 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->size = v2(3, 3);
 			}
 		} break;
+		case PFX_ASH: {
+			for (int i = 0; i < n_particles; i++) {
+				Particle* p = particle_new();
+				p->kind = PFX_ASH;
+				float z = get_random_float32_in_range(0, 20);
+				float a = float_alpha(z, 0, 20);
+
+				// Ge partikeln fysikegenskaper och rotation
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_gravity;
+				
+				// Placering och initial hastighet
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
+				p->col = v4(0.5, 0.3, 0.1, 1.0);  // Mörka askliknande färger
+				p->velocity = v2(get_random_float32_in_range(-5, 5), a * -10); // Långsammare fall
+				p->size = v2_mulf(v2(1, 1), a * 2);  // Mindre storlek än snö
+				p->immortal = true;
+				p->identifier = a;
+			}
+		}
+		case PFX_LEAF: {
+			for (int i = 0; i < n_particles; i++) {
+				Particle* p = particle_new();
+				p->kind = PFX_LEAF;
+				float z = get_random_float32_in_range(0, 20);
+				float a = float_alpha(z, 0, 20);
+
+				// Ge partikeln fysikegenskaper och gravitation
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_gravity;
+				
+				// Placering och initial hastighet
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
+				p->col = v4(0.1 + (rand() / (float)RAND_MAX) * (0.3 - 0.1), 0.5 + (rand() / (float)RAND_MAX) * (0.8 - 0.5), 0.1 + (rand() / (float)RAND_MAX) * (0.2 - 0.1), 1.0);
+				p->velocity = v2(get_random_float32_in_range(-10, 10), a * -15);  // Långsamt fallande
+				p->size = v2_mulf(v2(2, 2), a * 3);  // Större, oregelbunden storlek
+				p->immortal = true;
+				p->identifier = a;
+			}
+		}
+		case PFX_RAIN: {
+			for (int i = 0; i < n_particles; i++) {
+				Particle* p = particle_new();
+				p->kind = PFX_RAIN;
+				float z = get_random_float32_in_range(0, 20);
+				float a = float_alpha(z, 0, 20);
+
+				// Ge partikeln fysik och gravitation, men ingen rotation
+				p->flags |= PARTICLE_FLAGS_physics | PARTICLE_FLAGS_gravity;
+				
+				// Placering och initial hastighet
+				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
+				p->col = v4(0.3, 0.3, 1.0, 0.5);  // Blå genomskinliga droppar
+				p->velocity = v2(0, a * -300);  // Snabbare fall för regn
+				p->size = v2_mulf(v2(0.5, 4), a * 4);  // Smala, långa droppar
+				p->immortal = true;
+				p->identifier = a;
+			}
+		}
+
+		case PFX_WIND: { 			//DENNA ÄR RIKTIGT FUL...
+			for (int i = 0; i < n_particles; i++) {
+				Particle* p = particle_new();
+				p->kind = PFX_WIND;
+
+				// Generera ett slumptal för avstånd från höger sidan
+				float z = get_random_float32_in_range(0, 20);
+				float a = float_alpha(z, 0, 20);
+				
+				// Ge partikeln fysikegenskaper
+				p->flags |= PARTICLE_FLAGS_physics; // Ingen gravitation för vind
+				p->pos = v2(window.width / 2, get_random_float32_in_range(-window.height / 2, window.height / 2)); // Starta från höger sida
+				p->col = v4(0.7, 0.7, 1.0, 0.5); // Ljusblå färg för vind
+				p->velocity = v2(-50 * a, get_random_float32_in_range(-5, 5)); // Blåser åt vänster med mindre vertikal rörelse för mer stabilitet
+				p->size = v2_mulf(v2(10, 1), a * 2); // Längre partikelstorlek för vind, med varierande storlek
+				p->immortal = true; // Partiklarna ska finnas kvar
+				p->identifier = a; // Identifiera partikeln
+			}
+		}
 		case PFX_SNOW: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
@@ -388,6 +465,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->identifier = a;
 			}
 		}
+
 		default: { log("Something went wrong with particle generation"); } break;
 	}
 }
@@ -1424,6 +1502,57 @@ void stage_11_to_19() {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 }
 
+void stage_21_to_29() {
+	float r = 0.5f;
+	float g = 0.2f;
+	float b = 0.0f;  // Mörk orange/brun för lavabakgrund
+	world->world_background = v4(r, g, b, 1.0f); // Background color for lava
+
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+	// Emit aska (ash) partiklar
+	int n_ash_particles = number_of_certain_particle(PFX_ASH);
+	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 500 * ((float)current_stage_level / (float)10) - n_ash_particles, PFX_ASH);
+}
+void stage_31_to_39() {
+    float r = 0.5f;
+    float g = 0.2f;
+    float b = 0.0f;  // Mörk orange/brun för lavabakgrund
+    world->world_background = v4(r, g, b, 1.0f); // Background color for lava
+
+    summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+    // Emit lövpartiklar
+    int n_leaf_particles = number_of_certain_particle(PFX_LEAF);
+    particle_emit(v2(0, 0), v4(0.1, 0.5, 0.1, 1.0), 500 * ((float)current_stage_level / (float)10) - n_leaf_particles, PFX_LEAF);
+}
+
+void stage_41_to_49() {
+    float r = 0.5f;
+    float g = 0.2f;
+    float b = 0.0f;  // Mörk orange/brun för lavabakgrund
+    world->world_background = v4(r, g, b, 1.0f); // Background color for lava
+
+    summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+    // Emit regnpartiklar
+    int n_rain_particles = number_of_certain_particle(PFX_RAIN);
+    particle_emit(v2(0, 0), v4(0.6, 0.6, 1.0, 0.5), 500 * ((float)current_stage_level / (float)10) - n_rain_particles, PFX_RAIN);
+}
+void stage_51_to_59() {
+    float r = 0.5f;
+    float g = 0.5f;
+    float b = 0.8f;  // Bakgrundsfärg för vindnivå
+    world->world_background = v4(r, g, b, 1.0f); // Sätt bakgrundsfärg
+
+    summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+    // Emit vindpartiklar
+    int n_wind_particles = number_of_certain_particle(PFX_WIND);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000 - n_wind_particles, PFX_WIND); // Anpassa antalet
+}
+
+
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
@@ -1445,6 +1574,10 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	else 
 	{
 		remove_all_particle_type(PFX_SNOW);
+		remove_all_particle_type(PFX_ASH);
+		remove_all_particle_type(PFX_LEAF);
+		remove_all_particle_type(PFX_RAIN);
+		remove_all_particle_type(PFX_WIND);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
 }
@@ -1541,6 +1674,10 @@ void draw_game() {
 		number_of_shots_missed = 0;
 		clean_world();
 		remove_all_particle_type(PFX_SNOW);
+		remove_all_particle_type(PFX_ASH);
+		remove_all_particle_type(PFX_LEAF);
+		remove_all_particle_type(PFX_RAIN);
+		remove_all_particle_type(PFX_WIND);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 		draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 	}

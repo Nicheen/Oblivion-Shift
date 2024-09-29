@@ -39,6 +39,10 @@ typedef enum ParticleKind {
 	PFX_BOUNCE = 2,
 	PFX_HARD_OBSTACLE = 3,
 	PFX_SNOW = 4,
+	PFX_ASH = 5,
+	PFX_LEAF = 6,
+	PFX_RAIN = 7,
+	PFX_WIND = 8,
 
 	PFX_MAX,
 } ParticleKind;
