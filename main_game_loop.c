@@ -657,6 +657,21 @@ void apply_effect(Effect* effect) {
 	}
 }
 
+string effect_pretty_text(int type) {
+	switch(type) {
+		case EFFECT_IMMORTAL_BOTTOM: return STR("Immortal Bottom");
+		case EFFECT_IMMORTAL_TOP: return STR("Immortal Top");
+		case EFFECT_EXTRA_HEALTH: return STR("Extra Health");
+		case EFFECT_EXPAND_PLAYER: return STR("Expand Player");
+		case EFFECT_SPEED_PLAYER: return STR("Speed Player");
+		case EFFECT_MIRROR_PLAYER: return STR("Mirror Player");
+		case EFFECT_SLOW_PLAYER: return STR("Slow Player");
+		case EFFECT_GLIDE_PLAYER: return STR("Glide Player");
+		case EFFECT_SLOW_PROJECTILE_PLAYER: return STR("Slow Projectile Player");
+		case EFFECT_WEAKNESS_PLAYER: return STR("Weakness Player");
+		default: return STR("ERROR");
+	}
+}
 
 // -----------------------------------------------------------------------
 //                     UNCATEGORIZED FUNCTIONS
@@ -1301,13 +1316,25 @@ void draw_boss_health_bar() {
 }
 
 void draw_effect_ui() {
+	int y_diff = 0;
 	for (int i=0; i <= MAX_EFFECT_COUNT; i++) {
 		Effect* effect = &world->effects[i];
 		if (!(effect->is_valid)) { continue; }
 
 		if (!(effect->timer == NULL)) {
-			draw_text(font_bold, sprint(get_temporary_allocator(), STR("Effect Type: %i"), effect->effect_type), font_height, v2(0, 0), v2(0.4, 0.4), COLOR_WHITE);
-		
+			
+			Vector2 effect_position = v2(window.width / 2 - 150, window.height / 2 - 30 - y_diff);
+
+			Gfx_Text_Metrics m = measure_text(font_bold, effect_pretty_text(effect->effect_type), font_height, v2(0.4, 0.4));
+
+
+			draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
+			float a = 1.0f - effect->timer->progress;
+			draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
+			draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
+			
+			
+			y_diff += 25;
 			if (timer_finished(effect->timer)) {
 				destroy_timedevent(effect->timer);
 				destroy_effect(effect);
