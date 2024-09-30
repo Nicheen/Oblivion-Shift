@@ -2,6 +2,22 @@
 // Structs (typedef struct)
 // -----------------------------------------------------------------------
 
+typedef struct PointLight {
+	Vector2 position; // xy, zw unused
+	float radius;
+	float intensity;
+	Vector4 color;
+} PointLight;
+
+// BEWARE std140 packing:
+// https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-packing-rules
+typedef struct Scene_Cbuffer {
+	Vector2 mouse_pos_screen; // We use this to make a light around the mouse cursor
+	Vector2 window_size; // We only use this to revert the Y in the shader because for some reason d3d11 inverts it.
+	PointLight point_lights[POINT_LIGHT_MAX];
+	int point_light_count;
+} Scene_Cbuffer;
+
 typedef struct TimedEvent {
     bool is_valid;
 	TimedEventWorldType worldtype;

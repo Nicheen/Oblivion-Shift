@@ -1,6 +1,59 @@
 #define m4_identity m4_make_scale(v3(1, 1, 1))
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
 
+Gfx_Shader_Extension load_shader(string file_path, int cbuffer_size) {
+	string source;
+	
+	bool ok = os_read_entire_file(file_path, &source, get_heap_allocator());
+	assert(ok, "Could not read %s", file_path);
+	
+	Gfx_Shader_Extension shader;
+	ok = gfx_compile_shader_extension(source
+	, cbuffer_size, &shader);
+	assert(ok, "Failed compiling shader extension");
+	
+	return shader;
+}
+
+Draw_Quad ndc_quad_to_screen_quad(Draw_Quad ndc_quad) {
+
+	// NOTE: we're assuming these are the screen space matricies.
+	Matrix4 proj = draw_frame.projection;
+	Matrix4 view = draw_frame.camera_xform;
+
+	Matrix4 ndc_to_screen_space = m4_identity;
+	ndc_to_screen_space = m4_mul(ndc_to_screen_space, m4_inverse(proj));
+	ndc_to_screen_space = m4_mul(ndc_to_screen_space, view);
+
+	ndc_quad.bottom_left = m4_transform(ndc_to_screen_space, v4(v2_expand(ndc_quad.bottom_left), 0, 1)).xy;
+	ndc_quad.bottom_right = m4_transform(ndc_to_screen_space, v4(v2_expand(ndc_quad.bottom_right), 0, 1)).xy;
+	ndc_quad.top_left = m4_transform(ndc_to_screen_space, v4(v2_expand(ndc_quad.top_left), 0, 1)).xy;
+	ndc_quad.top_right = m4_transform(ndc_to_screen_space, v4(v2_expand(ndc_quad.top_right), 0, 1)).xy;
+
+	return ndc_quad;
+}
+
+Vector2 world_pos_to_ndc(Vector2 world_pos) {
+
+	Matrix4 proj = draw_frame.projection;
+	Matrix4 view = draw_frame.camera_xform;
+
+	Matrix4 world_space_to_ndc = m4_identity;
+	world_space_to_ndc = m4_mul(proj, m4_inverse(view));
+
+	Vector2 ndc = m4_transform(world_space_to_ndc, v4(v2_expand(world_pos), 0, 1)).xy;
+	return ndc;
+}
+
+Vector2 ndc_pos_to_screen_pos(Vector2 ndc) {
+	float w = window.width;
+	float h = window.height;
+	Vector2 screen = ndc;
+	screen.x = (ndc.x * 0.5f + 0.5f) * w;
+	screen.y = (1.0f - (ndc.y * 0.5f + 0.5f)) * h;
+	return screen;
+}
+
 inline float v2_dist(Vector2 a, Vector2 b) {
     return v2_length(v2_sub(a, b));
 }

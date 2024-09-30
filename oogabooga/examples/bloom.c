@@ -193,7 +193,8 @@ Gfx_Shader_Extension load_shader(string file_path, int cbuffer_size) {
 	assert(ok, "Could not read %s", file_path);
 	
 	Gfx_Shader_Extension shader;
-	ok = gfx_compile_shader_extension(source, cbuffer_size, &shader);
+	ok = gfx_compile_shader_extension(source
+	, cbuffer_size, &shader);
 	assert(ok, "Failed compiling shader extension");
 	
 	return shader;

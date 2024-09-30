@@ -1,9 +1,20 @@
 
 // This is copypasted in bloom.hlsl and bloom_map.hlsl.
 // You can do #include in hlsl shaders, but I wanted this example to be very simple to look at.
+struct PointLight {
+	float2 position;
+	float radius;
+	float intensity;
+	float4 color;
+};
+
+static const int LIGHT_MAX = 256;
+
 cbuffer some_cbuffer : register(b0) {
     float2 mouse_pos_screen; // In pixels
     float2 window_size;
+	PointLight point_lights[LIGHT_MAX];
+	int point_light_count;
 }
 float4 get_light_contribution(PS_INPUT input) {
 

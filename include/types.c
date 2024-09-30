@@ -2,6 +2,14 @@
 // Types (typedef enum)
 // -----------------------------------------------------------------------
 
+typedef enum View_Mode {
+	VIEW_GAME_AFTER_POSTPROCESS,
+	VIEW_GAME_BEFORE_POSTPROCESS,
+	VIEW_BLOOM_MAP,
+	
+	VIEW_MODE_MAX
+} View_Mode; 
+
 typedef enum TimedEventType {
 	TIMED_EVENT_NIL = 0,
 
@@ -29,6 +37,7 @@ typedef enum ParticleFlags {
 	PARTICLE_FLAGS_friction = (1<<2),
 	PARTICLE_FLAGS_fade_out_with_velocity = (1<<3),
 	PARTICLE_FLAGS_gravity = (1<<4),
+	PARTICLE_FLAGS_light = (1<<5),
 	// PARTICLE_FLAGS_bounce = (1<<4),
 } ParticleFlags;
 

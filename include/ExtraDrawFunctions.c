@@ -111,3 +111,13 @@ void draw_rounded_centered_rect(Vector2 position, Vector2 size, Vector4 color, f
     Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
     draw_rounded_rect(draw_position, size, color, radius);
 }
+
+void draw_centered_in_frame_rect(Vector2 position, Vector2 size, Vector4 color, Draw_Frame* draw_frame) {
+    Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
+    draw_rect_in_frame(draw_position, size, color, draw_frame);
+}
+
+void draw_centered_in_frame_circle(Vector2 position, Vector2 size, Vector4 color, Draw_Frame* draw_frame) {
+    Vector2 draw_position = v2_sub(position, v2_mulf(size, 0.5));
+    draw_circle_in_frame(draw_position, size, color, draw_frame);
+}
