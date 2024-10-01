@@ -38,6 +38,8 @@ Gfx_Image* effect_heart_sprite = NULL;
 
 bool debug_mode = false;
 bool game_over = false;
+bool use_shaders = true;  // Global variable to control shader usage
+
 
 //
 // ---- Menu Booleans ---- 
@@ -46,6 +48,7 @@ bool game_over = false;
 bool is_main_menu_active = false;
 bool is_settings_menu_active = false;
 bool is_game_paused = false;
+bool is_graphics_settings_active = false;
 
 //
 // ---- Initialize Important Variables ---- 
@@ -1448,7 +1451,7 @@ void draw_effect_ui() {
 
 
 			draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
-			float a = 1.0f - effect->timer->progress;
+a			float a = 1.0f - effect->timer->progress;
 			draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
 			draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
 			
@@ -1514,6 +1517,8 @@ void draw_settings_menu() {
 		y -= button_size.y;
 		// Graphics Settings Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Graphics")), v2(-button_size.x / 2, y), button_size, true)) {
+			is_settings_menu_active = false;
+			is_graphics_settings_active = true;
 			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
 		}
 		y -= button_size.y;
@@ -1528,6 +1533,62 @@ void draw_settings_menu() {
 			is_main_menu_active = true;       // Return to main menu
 		}
 	}
+}
+
+void draw_graphics_settings_menu() {
+    if (is_graphics_settings_active) {
+        draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+
+        // Create the label using sprint
+        string label = sprint(get_temporary_allocator(), STR("Graphics Settings"));
+        u32 font_height = 48;
+        float button_width = 250;
+        Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+        draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
+
+        Vector2 button_size = v2(button_width, 50);
+        int y = 0;
+
+        // Shader Toggle
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Shaders: %s"), use_shaders ? "ON" : "OFF"), 
+                        v2(-button_size.x / 2, y), button_size, true)) {
+            use_shaders = !use_shaders;
+            // Here you would implement the logic to enable/disable shaders
+        }
+        y -= 60;
+
+        // Dummy Resolution Setting
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Resolution: 1920x1080")), 
+                        v2(-button_size.x / 2, y), button_size, true)) {
+            // Dummy function - doesn't actually change resolution
+        }
+        y -= 60;
+
+        // Dummy Fullscreen Toggle
+        static bool dummy_fullscreen = false;
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Fullscreen: %s"), dummy_fullscreen ? "ON" : "OFF"), 
+                        v2(-button_size.x / 2, y), button_size, true)) {
+            dummy_fullscreen = !dummy_fullscreen;
+            // Dummy function - doesn't actually toggle fullscreen
+        }
+        y -= 60;
+
+        // Dummy VSync Toggle
+        static bool dummy_vsync = true;
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("VSync: %s"), dummy_vsync ? "ON" : "OFF"), 
+                        v2(-button_size.x / 2, y), button_size, true)) {
+            dummy_vsync = !dummy_vsync;
+            // Dummy function - doesn't actually toggle VSync
+        }
+        y -= 60;
+
+        // Back Button to return to Settings Menu
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Back")), 
+                        v2(-button_size.x / 2, y), button_size, true)) {
+            is_graphics_settings_active = false;  // Close graphics settings menu
+            is_settings_menu_active = true;       // Return to settings menu
+        }
+    }
 }
 
 void draw_timed_events() {
@@ -1873,8 +1934,10 @@ int entry(int argc, char **argv) {
 		
 		if (is_key_just_pressed(KEY_ESCAPE)) {
 			consume_key_just_pressed(KEY_ESCAPE);
-
-			if (is_settings_menu_active) {
+			if (is_graphics_settings_active) {
+				is_graphics_settings_active = false;
+				is_settings_menu_active = true;
+			} else if (is_settings_menu_active) {
 				// Go back to main menu from settings
 				is_settings_menu_active = false;
 				is_main_menu_active = true;
@@ -2063,7 +2126,7 @@ int entry(int argc, char **argv) {
 		// Draw game with light shader to game_image
 		scene_cbuffer.light_count = 0; // clean the list
 
-		if (true) {
+		if (use_shaders) {
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 			Entity* entity = &world->entities[i];
 				if (!entity->is_valid) continue;
@@ -2150,6 +2213,8 @@ int entry(int argc, char **argv) {
 		}
 
 		draw_effect_ui();
+
+		draw_graphics_settings_menu();
 
 		draw_settings_menu();
 
