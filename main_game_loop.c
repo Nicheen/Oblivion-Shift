@@ -41,6 +41,14 @@ bool game_over = false;
 bool use_shaders = true;  // Global variable to control shader usage
 
 
+
+
+//
+// ---- Starting Screen 
+//
+bool is_starting_screen_active = true;
+bool is_game_running = false;
+
 //
 // ---- Menu Booleans ---- 
 //
@@ -1465,10 +1473,52 @@ void draw_effect_ui() {
 	}
 }
 
+void draw_main_screen() {
+	if (is_starting_screen_active) {
+		is_game_paused = true;  // Ensure the game is paused when in the main screen
+
+		// Draw a black background for the starting screen
+		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 1));
+
+		// Create Play button
+		string label = sprint(get_temporary_allocator(), STR("Not Pong"));
+		u32 font_height = 48;
+		float button_size = 200;
+		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
+
+		// Play Option
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Play")), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
+			is_main_menu_active = false;  // Close menu
+			is_game_paused = false;      
+			is_starting_screen_active = false;
+			is_game_running = true;
+		}
+
+		// Settings Option
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Settings")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
+			is_main_menu_active = false;      // Close main menu
+			is_settings_menu_active = true;   // Open settings menu
+			is_starting_screen_active = false;
+		}
+
+		// Quit Option
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
+			window.should_close = true;  // Quit game
+		}
+	}
+}
+
 void draw_main_menu() {
 	if (is_main_menu_active) {
-		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
-		
+
+		if (is_game_running) {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		}
+		else {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 1));
+		}
+
 		// Create the label using sprint
 		string label = sprint(get_temporary_allocator(), STR("Main Menu"));
 		u32 font_height = 48;
@@ -1500,7 +1550,13 @@ void draw_main_menu() {
 
 void draw_settings_menu() {
 	if (is_settings_menu_active) {
-		draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		
+		if (is_game_running) {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		}
+		else {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 1));
+		}
 
 		// Create the label using sprint
 		string label = sprint(get_temporary_allocator(), STR("Settings"));
@@ -1537,8 +1593,14 @@ void draw_settings_menu() {
 
 void draw_graphics_settings_menu() {
     if (is_graphics_settings_active) {
-        draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
 
+        if (is_game_running) {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 0.5));
+		}
+		else {
+			draw_rect(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), v4(0, 0, 0, 1));
+		}
+		
         // Create the label using sprint
         string label = sprint(get_temporary_allocator(), STR("Graphics Settings"));
         u32 font_height = 48;
@@ -1875,6 +1937,7 @@ int entry(int argc, char **argv) {
 	assert(effect_heart_sprite, "Failed loading 'res/textures/effect_heart.png'");
 
 	// Here we create the player object
+	
 	player = create_player();
 	
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
@@ -1925,7 +1988,7 @@ int entry(int argc, char **argv) {
 		// ---- BUTTONS THAT ONLY WORK IN DEBUG MODE ----
 		// 1-9 = Increment stage by that amount
 		// R   = Reload the shader file
-
+		
 		if (is_key_just_pressed(KEY_TAB))
 		{
 			consume_key_just_pressed(KEY_TAB);
@@ -2220,6 +2283,8 @@ int entry(int argc, char **argv) {
 
 		draw_main_menu();
 
+		draw_main_screen();
+	
 		os_update();
 		gfx_update();
 
