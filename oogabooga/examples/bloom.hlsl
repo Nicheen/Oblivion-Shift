@@ -1,20 +1,24 @@
 
 // This is copypasted in bloom.hlsl and bloom_map.hlsl.
 // You can do #include in hlsl shaders, but I wanted this example to be very simple to look at.
-struct PointLight {
+
+struct LightSource {
 	float2 position;
-	float radius;
 	float intensity;
+	float radius;
 	float4 color;
+	int type;
+	float2 direction;
+	float length;
 };
 
-static const int LIGHT_MAX = 256;
+#define MAX_LIGHTS 100
 
 cbuffer some_cbuffer : register(b0) {
     float2 mouse_pos_screen; // In pixels
     float2 window_size;
-    PointLight point_lights[LIGHT_MAX];
-	int point_light_count;
+	LightSource lights[MAX_LIGHTS];
+	int light_count;
 }
 
 Texture2D bloom_map: register(t0); // 0 because we bound to 0 in bloom.c

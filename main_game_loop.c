@@ -19,13 +19,17 @@ int number_of_shots_fired = 0;
 int number_of_shots_missed = 0;
 int number_of_effects = 0;
 int number_of_block_obstacles = 0;
+int number_of_particles = 0;
+
 float projectile_speed = 500;
 int number_of_hearts = 3;
 int current_stage_level = 0;
 int obstacle_count = 0;
+int light_count = 0;
 int latest_fps = 0;
 int latest_entites = 0;
 const u32 font_height = 48;
+LightSource lights[100];
 
 Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
@@ -53,7 +57,6 @@ float64 now;
 TimedEvent* color_switch_event = 0;
 Player* player = 0;
 World* world = 0; // Create an empty world to use for functions below
-Scene_Cbuffer* scene_cbuffer = 0;
 
 // -----------------------------------------------------------------------
 //                  CREATE FUNCTIONS FOR ARRAY LOOKUP
@@ -251,28 +254,6 @@ void remove_all_particle_type(ParticleKind kind) {
 			particle_clear(p);
 		}
 	}
-}
-
-void add_point_light(Vector2 world_pos, Vector4 col, float radius, float intensity) {
-	if (scene_cbuffer->point_light_count >= POINT_LIGHT_MAX) {
-		static bool has_notified = false;
-		if (!has_notified) {
-			log_warning("Max point lights reached");
-			has_notified = true;
-			
-			
-		}
-		return;
-	}
-	PointLight* pl = &scene_cbuffer->point_lights[scene_cbuffer->point_light_count];
-	scene_cbuffer->point_light_count += 1;
-
-	pl->color = col;
-	pl->intensity = intensity;
-	pl->radius = radius;
-	pl->position = v2(0.5, 0.5);
-	//pl->position = world_pos;
-	log("%v2", pl->position);
 }
 
 void particle_update() {
@@ -632,8 +613,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->grid_position = v2(x_index, y_index);
 	entity->position = v2(-180, -45);
 	entity->position = v2_add(entity->position, v2(x_index*(size + padding), y_index*(size + padding)));
-	add_point_light(entity->position, entity->color, 30, 1);
-	
+
 	// TODO: Make it more clear what each block does
 
 	float random_value = get_random_float64_in_range(0, 1);
@@ -980,7 +960,7 @@ bool boss_is_alive(World* world) {
 	return false;
 }
 
-void timed_event_info(TimedEvent* te, int index, float* y_offset, Draw_Frame* frame) {
+void timed_event_info(TimedEvent* te, int index, float* y_offset) {
     // Only proceed if the TimedEvent is valid
     if (!te->is_valid) return;
 
@@ -1008,13 +988,12 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset, Draw_Frame* fr
     }
 
     // Display the final constructed string at the current y_offset
-    draw_text_in_frame(font_light, 
+    draw_text(font_light, 
         temp, 
         font_height, 
         v2(-window.width / 2, window.height / 2 - 200 - *y_offset),  // Adjust y-position based on y_offset
         v2(0.4, 0.4), 
-        COLOR_GREEN,
-		frame
+        COLOR_GREEN
     );
 
     // Increase the y_offset for the next valid TimedEvent
@@ -1441,7 +1420,7 @@ void draw_boss_health_bar(Draw_Frame* frame) {
 			string label = sprint(get_temporary_allocator(), STR("%i"), entity->health);
 			u32 font_height = 48;
 			Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
-			draw_text_in_frame(font_bold, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE, frame);
+			draw_text(font_bold, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
 		}
 	}
 }
@@ -1455,7 +1434,7 @@ void draw_center_stage_text(Draw_Frame* frame)
 	draw_text_in_frame(font_bold, label, font_height, v2(-m.visual_size.x / 2, 0), v2(1, 1), COLOR_WHITE, frame);
 }
 
-void draw_effect_ui(Draw_Frame* frame) {
+void draw_effect_ui() {
 	int y_diff = 0;
 	for (int i=0; i <= MAX_EFFECT_COUNT; i++) {
 		Effect* effect = &world->effects[i];
@@ -1468,7 +1447,7 @@ void draw_effect_ui(Draw_Frame* frame) {
 			Gfx_Text_Metrics m = measure_text(font_bold, effect_pretty_text(effect->effect_type), font_height, v2(0.4, 0.4));
 
 
-			draw_centered_in_frame_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5), frame);
+			draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
 			float a = 1.0f - effect->timer->progress;
 			draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
 			draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
@@ -1551,10 +1530,10 @@ void draw_settings_menu() {
 	}
 }
 
-void draw_timed_events(Draw_Frame* frame) {
+void draw_timed_events() {
     float y_offset = 0;  // Initialize y_offset to zero
     for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-        timed_event_info(&world->timedevents[i], i, &y_offset, frame);
+        timed_event_info(&world->timedevents[i], i, &y_offset);
     }
 }
 
@@ -1757,17 +1736,6 @@ void draw_game(Draw_Frame *frame) {
 	
 	int number_of_particles = particle_render(frame);
 	
-	if (debug_mode) {
-		draw_line_in_frame(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5), frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_text_in_frame(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN, frame);
-		draw_timed_events(frame);
-	}
-	
 	// Check if game is over or not
 	game_over = number_of_shots_missed >= number_of_hearts;
 
@@ -1793,7 +1761,7 @@ void draw_game(Draw_Frame *frame) {
 
 	draw_death_borders(color_switch_event, frame);
 
-	draw_effect_ui(frame);
+	
 }
 
 int entry(int argc, char **argv) {
@@ -1814,8 +1782,7 @@ int entry(int argc, char **argv) {
 	world = alloc(get_heap_allocator(), sizeof(World));
 	memset(world, 0, sizeof(World));
 
-	scene_cbuffer = alloc(get_heap_allocator(), sizeof(Scene_Cbuffer));
-	memset(scene_cbuffer, 0, sizeof(Scene_Cbuffer));
+	Scene_Cbuffer scene_cbuffer;
 
 	// regular shader + point light which makes things extra bright
 	Gfx_Shader_Extension light_shader = load_shader(STR("oogabooga/examples/bloom_light.hlsl"), sizeof(Scene_Cbuffer));
@@ -2089,11 +2056,31 @@ int entry(int argc, char **argv) {
 		}
 
 		// Set stuff in cbuffer which we need to pass to shaders
-		scene_cbuffer->mouse_pos_screen = v2(input_frame.mouse_x, window.height-input_frame.mouse_y);
-		scene_cbuffer->window_size = v2(window.width, window.height);
+		scene_cbuffer.mouse_pos_screen = v2(input_frame.mouse_x, input_frame.mouse_y);
+		scene_cbuffer.window_size = v2(window.width, window.height);
 		
 		///
 		// Draw game with light shader to game_image
+		scene_cbuffer.light_count = 0; // clean the list
+
+		if (true) {
+			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			Entity* entity = &world->entities[i];
+				if (!entity->is_valid) continue;
+				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
+				if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT ||
+					entity->entitytype == ENTITY_OBSTACLE) {
+					LightSource light;
+					light.type = 0;
+					light.position = v2_add(entity->position, v2(window.width / 2, window.height / 2));
+					light.intensity = 0.2f;
+					light.radius = 100.0f;
+					light.color = entity->color;
+					scene_cbuffer.lights[scene_cbuffer.light_count] = light;
+					scene_cbuffer.light_count++;
+				}
+			}
+		}
 		
 		// Reset draw frame & clear the image with a clear color
 		draw_frame_reset(&offscreen_draw_frame);
@@ -2123,7 +2110,7 @@ int entry(int argc, char **argv) {
 		
 		// Draw game things to offscreen Draw_Frame
 		draw_game(&offscreen_draw_frame);
-		
+
 		// Set the shader & cbuffer before the render call
 		offscreen_draw_frame.shader_extension = bloom_map_shader;
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
@@ -2149,27 +2136,20 @@ int entry(int argc, char **argv) {
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
 
 		gfx_render_draw_frame(&offscreen_draw_frame, final_image);
+		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 
-		switch (view) {
-			case VIEW_GAME_AFTER_POSTPROCESS:
-				Draw_Quad *q = draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
-				// The draw image will be flipped on y, so we want to draw it "upside down"
-				//swap(q->uv.y, q->uv.w, float);
-				break;
-			case VIEW_GAME_BEFORE_POSTPROCESS:
-				draw_image(game_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
-				break;
-			case VIEW_BLOOM_MAP:
-				draw_image(bloom_map, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
-				break;
-			default: break;
+		if (debug_mode) {
+			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
+			draw_timed_events();
 		}
-		
-		for (int i = 0; i < VIEW_MODE_MAX; i += 1) {
-			if (draw_button(font_light, font_height / 4, view_mode_stringify(i), v2(-window.width/2+40, window.height/2-100-i*60), v2(100, 25), i == view)) {
-				view = i;
-			}
-		}
+
+		draw_effect_ui();
 
 		draw_settings_menu();
 
