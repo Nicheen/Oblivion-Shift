@@ -1451,7 +1451,7 @@ void draw_effect_ui() {
 
 
 			draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
-a			float a = 1.0f - effect->timer->progress;
+			float a = 1.0f - effect->timer->progress;
 			draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
 			draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
 			
