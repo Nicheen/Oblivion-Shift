@@ -250,6 +250,17 @@ TimedEvent* initialize_effect_event(World* world, float duration) {
 //                          PARTICLE FUNCTIONS
 // -----------------------------------------------------------------------
 
+void create_light_source(Vector2 position, Vector4 color, float size, Scene_Cbuffer* scene_cbuffer) {
+	LightSource light;
+	light.type = 0;
+	light.position = v2_add(position, v2(window.width / 2, window.height / 2));
+	light.intensity = 0.2f;
+	light.radius = size;
+	light.color = color;
+	scene_cbuffer->lights[scene_cbuffer->light_count] = light;
+	scene_cbuffer->light_count++;
+}
+
 int number_of_certain_particle(ParticleKind kind) {
 	int n = 0;
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
@@ -901,8 +912,8 @@ void apply_damage(Entity* entity, float damage) {
 			//propagate_wave(entity);
 			//float random_value_for_effect = get_random_float64_in_range(0, 1);
 
-			//Entity* effect_entity = create_entity();
-			//setup_effect_entity(effect_entity, entity);
+			Entity* effect_entity = create_entity();
+			setup_effect_entity(effect_entity, entity);
 			
 			
 			// Get the grid position of the obstacle from the entity
@@ -1273,7 +1284,7 @@ void draw_beam(Entity* entity, Draw_Frame* frame) {
 
         Vector2 warning_position = v2_sub(entity->position, v2(warning_beam_size / 2, entity->size.y / 2));
         Vector2 warning_beam_size_vec = v2(warning_beam_size, -window.height); 
-        draw_rect(warning_position, warning_beam_size_vec, v4(0, 1, 0, 0.5)); 
+        draw_rect_in_frame(warning_position, warning_beam_size_vec, v4(0, 1, 0, 0.5), frame); 
     }
 	if (entity->child != NULL) {
 		draw_centered_in_frame_rect(entity->child->position, entity->child->size, v4(1, 0, 0, 0.7), frame);
@@ -1656,23 +1667,28 @@ void draw_timed_events() {
 // -----------------------------------------------------------------------
 
 void stage_0_to_9() {
-	float r = 0.0f;
-	float g = 0.0f;
-	float b = (float)current_stage_level / 20.0f;
-	world->world_background = v4(r, g, b, 1.0f); // Background color
-	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = (float)current_stage_level / 20.0f;
+    world->world_background = v4(r, g, b, 1.0f); // Background color
+    summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
-	int n_snow_particles = number_of_certain_particle(PFX_SNOW);
-	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, PFX_SNOW);
+    int n_snow_particles = number_of_certain_particle(PFX_SNOW);
+    // Exponential snow spawn rate (closer to boss = more snow)
+    int snow_to_spawn = (int)(1000 * pow(2.0f, (float)current_stage_level / 10)) - n_snow_particles;
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), snow_to_spawn, PFX_SNOW);
 }
 
 void stage_10_boss() {
-	Entity* boss = create_entity();
-	setup_boss(boss);
+    Entity* boss = create_entity();
+    setup_boss(boss);
 
-	int n_snow_particles = number_of_certain_particle(PFX_SNOW);
-	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000*((float)current_stage_level / (float)10) - n_snow_particles, PFX_SNOW);
+    int n_snow_particles = number_of_certain_particle(PFX_SNOW);
+    // Exponential snow spawn rate during boss stage
+    int snow_to_spawn = (int)(1000 * pow(2.0f, (float)current_stage_level / 10)) - n_snow_particles;
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), snow_to_spawn, PFX_SNOW);
 }
+
 
 void stage_11_to_19() {
 	//remove_all_particle_type(PFX_SNOW);
@@ -2188,19 +2204,23 @@ int entry(int argc, char **argv) {
 
 		if (use_shaders) {
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-			Entity* entity = &world->entities[i];
-				if (!entity->is_valid) continue;
+				Entity* entity = &world->entities[i];
 				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
+				if (!entity->is_valid) continue;
 				if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT ||
 					entity->entitytype == ENTITY_OBSTACLE) {
-					LightSource light;
-					light.type = 0;
-					light.position = v2_add(entity->position, v2(window.width / 2, window.height / 2));
-					light.intensity = 0.2f;
-					light.radius = 100.0f;
-					light.color = entity->color;
-					scene_cbuffer.lights[scene_cbuffer.light_count] = light;
-					scene_cbuffer.light_count++;
+					create_light_source(entity->position, entity->color, 100.0f, &scene_cbuffer);
+				}
+			}
+
+			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+				Particle* p = &particles[i];
+				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
+				if (!(p->flags & PARTICLE_FLAGS_valid)) {
+					continue;
+				}
+				if (p->kind != PFX_SNOW) {
+					create_light_source(p->pos, p->col, 10.0f, &scene_cbuffer);
 				}
 			}
 		}

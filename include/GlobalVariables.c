@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------
 
 #define MAX_ENTITY_COUNT 1024
-#define MAX_LIGHTS 10
+#define MAX_LIGHTS 100
 
 #define PLAYABLE_WIDTH 400
 #define GRID_WIDTH 13
