@@ -2279,22 +2279,32 @@ int entry(int argc, char **argv) {
 		
 		///
 		// Draw game image into final image, using the bloom shader which samples from the bloom_map
-		
-		draw_frame_reset(&offscreen_draw_frame);
-		gfx_clear_render_target(final_image, COLOR_BLACK);
-		
+		tm_scope("draw_frame_reset()") {
+			draw_frame_reset(&offscreen_draw_frame);
+		}
+		tm_scope("gfx_clear_render_target(final_image)") {
+			gfx_clear_render_target(final_image, COLOR_BLACK);
+		}
 		// To sample from another image in the shader, we must bind it to a specific slot.
-		draw_frame_bind_image_to_shader(&offscreen_draw_frame, bloom_map, 0);
-		
+
+		tm_scope("draw_frame_bind_image_to_shader(bloom_map)") {
+			draw_frame_bind_image_to_shader(&offscreen_draw_frame, bloom_map, 0);
+		}
 		// Draw the game the final image, but now with the post process shader
-		draw_image_in_frame(game_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE, &offscreen_draw_frame);
+		tm_scope("draw_image_in_frame") {
+			draw_image_in_frame(game_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE, &offscreen_draw_frame);
+		}
 		
 		offscreen_draw_frame.shader_extension = postprocess_bloom_shader;
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
+		tm_scope("gfx_render_draw_frame(final_image)") {
+			gfx_render_draw_frame(&offscreen_draw_frame, final_image);
+		}
+		tm_scope("draw_image(final_image)") {
+			draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 
-		gfx_render_draw_frame(&offscreen_draw_frame, final_image);
-		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
-
+		}
+		
 		if (debug_mode) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
@@ -2305,7 +2315,7 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 			draw_timed_events();
 		}
-
+		
 		draw_effect_ui();
 
 		draw_graphics_settings_menu();
