@@ -40,9 +40,6 @@ bool debug_mode = false;
 bool game_over = false;
 bool use_shaders = true;  // Global variable to control shader usage
 
-
-
-
 //
 // ---- Starting Screen 
 //
@@ -116,7 +113,8 @@ Effect* create_effect() {
 	Effect* effect_found = 0;
 	effect_found = alloc(get_heap_allocator(), sizeof(Effect));
 	memset(effect_found, 0, sizeof(Effect));
-	for (int i = 0; i < MAX_EFFECT_COUNT; i++) {
+
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Effect* existing_effect = &world->effects[i];
 		if (!existing_effect->is_valid) {
 			effect_found = existing_effect;
@@ -124,7 +122,12 @@ Effect* create_effect() {
 		}
 	}
 	assert(effect_found, "No more free effect slots!");
-	effect_found->is_valid = true;		
+	effect_found->is_valid = true;
+
+	TimedEvent* timer = 0;
+	timer->is_valid = true;
+	effect_found->timer = timer;
+	
 	return effect_found;
 }
 
@@ -561,8 +564,7 @@ void summon_icicle(Entity* entity, Vector2 spawn_pos) {
 	entity->velocity = v2(0, -200);
 }
 
-Effect* generate_random_effect() {
-	Effect* effect = create_effect();
+void setup_effect(Effect* effect) {
 
 	float random_value = get_random_float64_in_range(0, 1);
 	float n_effects = 5;
@@ -596,7 +598,7 @@ Effect* generate_random_effect() {
 		effect->effect_spawn = EFFECT_ENTITY_SPAWN_IN_OBSTACLE;
 	}
 
-	return effect;
+	effect->timer = initialize_effect_event(world, effect->effect_duration);
 }
 
 void setup_boss(Entity* entity) {
@@ -608,10 +610,8 @@ void setup_boss(Entity* entity) {
 	entity->size = v2(50, 50);
 	entity->start_size = entity->size;
 
-	TimedEvent* timed_event = initialize_boss_movement_event(world);
-	TimedEvent* attack_event = initialize_boss_attack_event(world);
-	entity->timer = timed_event;
-	entity->second_timer = attack_event;
+	entity->timer = initialize_boss_movement_event(world);
+	entity->second_timer = initialize_boss_attack_event(world);
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
@@ -692,15 +692,6 @@ void setup_effect_entity(Entity* entity, Entity* obstacle) {
 	entity->size = v2(20, 20);
 	entity->start_size = entity->size;
 	entity->position = obstacle->position;
-}
-
-Effect* setup_effect() {
-	Effect* effect = create_effect();
-	effect = generate_random_effect();
-	TimedEvent* timed_event = initialize_effect_event(world, effect->effect_duration);
-	effect->timer = timed_event;
-
-	return effect;
 }
 
 // void summon_world() needs the be furthers down since it might use 
@@ -828,6 +819,8 @@ void clean_world() {
 			destroy_entity(entity);
 		}
 		if (entity->entitytype == ENTITY_BOSS && entity->is_valid) {
+			destroy_timedevent(entity->timer);
+			destroy_timedevent(entity->second_timer);
 			destroy_entity(entity);
 		}
 		if (!(timer->worldtype == TIMED_EVENT_TYPE_WORLD) && timer->is_valid) {
@@ -903,17 +896,13 @@ void apply_damage(Entity* entity, float damage) {
 	entity->health -= damage;
 
 	if (entity->health <= 0) {
-		if (entity->entitytype == ENTITY_EFFECT) {
-			Effect* effect = setup_effect();
-		}
 		if (entity->entitytype == ENTITY_OBSTACLE) {
 			number_of_destroyed_obstacles ++;
 			//propagate_wave(entity);
 			//float random_value_for_effect = get_random_float64_in_range(0, 1);
 
-			
-			Entity* effect_entity = create_entity();
-			setup_effect_entity(effect_entity, entity);
+			//Entity* effect_entity = create_entity();
+			//setup_effect_entity(effect_entity, entity);
 			
 			
 			// Get the grid position of the obstacle from the entity
@@ -964,7 +953,7 @@ bool boss_is_alive(World* world) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
 
-		if (entity->entitytype == ENTITY_BOSS) {
+		if (entity->entitytype == ENTITY_BOSS && entity->is_valid) {
 			return true;
 		}
 	}
@@ -1447,28 +1436,30 @@ void draw_center_stage_text(Draw_Frame* frame)
 
 void draw_effect_ui() {
 	int y_diff = 0;
-	for (int i=0; i <= MAX_EFFECT_COUNT; i++) {
+	for (int i=0; i < MAX_ENTITY_COUNT; i++) {
 		Effect* effect = &world->effects[i];
-		if (!(effect->is_valid)) { continue; }
+	
+		if (effect == NULL || !(effect->is_valid)) {
+            continue;
+        }
 
-		if (!(effect->timer == NULL)) {
+		if (effect->timer == NULL || !(effect->timer->is_valid)) {
+            continue; // Skip this effect if the timer is not initialized
+        }
 			
-			Vector2 effect_position = v2(window.width / 2 - 150, window.height / 2 - 30 - y_diff);
+		Vector2 effect_position = v2(window.width / 2 - 150, window.height / 2 - 30 - y_diff);
 
-			Gfx_Text_Metrics m = measure_text(font_bold, effect_pretty_text(effect->effect_type), font_height, v2(0.4, 0.4));
+		Gfx_Text_Metrics m = measure_text(font_bold, effect_pretty_text(effect->effect_type), font_height, v2(0.4, 0.4));
 
-
-			draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
-			float a = 1.0f - effect->timer->progress;
-			draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
-			draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
-			
-			
-			y_diff += 25;
-			if (timer_finished(effect->timer)) {
-				destroy_timedevent(effect->timer);
-				destroy_effect(effect);
-			}
+		draw_centered_rect(v2_add(effect_position, v2(m.visual_size.x / 2, 0.75*m.visual_size.y / 2)), v2(1.25*m.visual_size.x, 1.25*m.visual_size.y), v4(0.5, 0.5, 0.5, 0.5));
+		float a = 1.0f - effect->timer->progress;
+		draw_rect(effect_position, v2(a*1.25*m.visual_size.x, 1.25*m.visual_size.y), COLOR_RED);
+		draw_text(font_bold, sprint(get_temporary_allocator(), effect_pretty_text(effect->effect_type)), font_height, effect_position, v2(0.4, 0.4), COLOR_WHITE);
+		
+		y_diff += 25;
+		if (timer_finished(effect->timer)) {
+			destroy_timedevent(effect->timer);
+			destroy_effect(effect);
 		}
 	}
 }
@@ -1684,9 +1675,9 @@ void stage_10_boss() {
 }
 
 void stage_11_to_19() {
-	remove_all_particle_type(PFX_SNOW);
+	//remove_all_particle_type(PFX_SNOW);
 	float stage_progress = current_stage_level - 10;
-	float r = stage_progress / 20.0f;
+	float r = (float)stage_progress / 20.0f;
 	float g = 0.0f;
 	float b = 0.0f;
 	world->world_background = v4(r, g, b, 1.0f); // Background color
@@ -1782,7 +1773,7 @@ void initialize_new_stage(World* world, int current_stage_level) {
 void draw_game(Draw_Frame *frame) {
 	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, frame);
 	draw_center_stage_text(frame);
-
+	
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
@@ -1908,16 +1899,16 @@ int entry(int argc, char **argv) {
 	Gfx_Shader_Extension light_shader;
 	Gfx_Shader_Extension bloom_map_shader;
 	Gfx_Shader_Extension postprocess_bloom_shader;
-	tm_scope("Loading") {
-		// regular shader + point light which makes things extra bright
-		light_shader = load_shader(STR("oogabooga/examples/bloom_light.hlsl"), sizeof(Scene_Cbuffer));
-		// shader used to generate bloom map. Very simple: It takes the output color -1 on all channels 
-		// so all we have left is how much bloom there should be
-		bloom_map_shader = load_shader(STR("oogabooga/examples/bloom_map.hlsl"), sizeof(Scene_Cbuffer));
-		// postprocess shader where the bloom happens. It samples from the generated bloom_map.
-		postprocess_bloom_shader = load_shader(STR("oogabooga/examples/bloom.hlsl"), sizeof(Scene_Cbuffer));
 
-	}
+	// regular shader + point light which makes things extra bright
+	light_shader = load_shader(STR("oogabooga/examples/bloom_light.hlsl"), sizeof(Scene_Cbuffer));
+	// shader used to generate bloom map. Very simple: It takes the output color -1 on all channels 
+	// so all we have left is how much bloom there should be
+	bloom_map_shader = load_shader(STR("oogabooga/examples/bloom_map.hlsl"), sizeof(Scene_Cbuffer));
+	// postprocess shader where the bloom happens. It samples from the generated bloom_map.
+	postprocess_bloom_shader = load_shader(STR("oogabooga/examples/bloom.hlsl"), sizeof(Scene_Cbuffer));
+
+	
 
 	Scene_Cbuffer scene_cbuffer;
 
@@ -2064,246 +2055,208 @@ int entry(int argc, char **argv) {
 		//               Entity Loop for updating and collisions
 		// -----------------------------------------------------------------------
 		int entity_counter = 0;
-		tm_scope("Update Entities") {
+		
+		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			Entity* entity = &world->entities[i];
+			if (!entity->is_valid) continue;
+			entity_counter++;
+
+			// Update positon from velocity of entity if game is not paused
+			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 			
-			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-				Entity* entity = &world->entities[i];
-				if (!entity->is_valid) continue;
-				entity_counter++;
-
-				// Update positon from velocity of entity if game is not paused
-				if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
-				
-				if (entity->entitytype == ENTITY_PROJECTILE) 
+			if (entity->entitytype == ENTITY_PROJECTILE) 
+			{
+				bool collision = false;
+				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
 				{
-					bool collision = false;
-					for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
-					{
-						Entity* other_entity = &world->entities[j];
-						if (entity == other_entity) continue;
-						if (collision) break;
-						switch(other_entity->entitytype) {
-							case(ENTITY_PLAYER):
-							case(ENTITY_BOSS):
-							case(ENTITY_OBSTACLE):{
-								if (circle_rect_collision(entity, other_entity)) 
-								{
-									handle_projectile_collision(entity, other_entity);
-									collision = true;
-								} 
-							} break;
+					Entity* other_entity = &world->entities[j];
+					if (!other_entity->is_valid) continue;
 
-							case(ENTITY_PROJECTILE): {
-								if (circle_circle_collision(entity, other_entity))
-								{
-									particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
-									handle_projectile_collision(entity, other_entity);
-									collision = true;
-								}
-							} break;
-
-							case(ENTITY_EFFECT): {
-								if (circle_circle_collision(entity, other_entity)) 
-								{
-									particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
-									handle_projectile_collision(entity, other_entity);
-
-									Effect* effect = create_effect();
-									apply_effect(effect);
-
-									collision = true;
-								}
-							} break;
-							default: { 
-								continue; 
-							} break;
-						}
-					}
-
-					if (entity->position.x <=  -PLAYABLE_WIDTH / 2 || entity->position.x >=  PLAYABLE_WIDTH / 2)
-					{
-						projectile_bounce_world(entity);
-						play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
-					}
-
-					if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2)
-					{
-						number_of_shots_missed++;
-						play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
-						destroy_entity(entity);
-					}
-				}
-				
-				if (entity->obstacle_type == OBSTACLE_BEAM) {
-					if (entity->child != NULL) {
-						if (rect_rect_collision(entity->child, player->entity)) {
-							if (!player->is_immune) {
-								handle_beam_collision(entity->child, player);
-								player->is_immune = true; // Sätt spelaren som immun
-								player->immunity_timer = 1.0f; // Sätt timer för immunitet
-							}
-						}
-					}
-				}
-
-				if (entity->entitytype == ENTITY_OBSTACLE) 
-				{
-					if (entity->obstacle_type == OBSTACLE_DROP) {
-						int x = entity->grid_position.x;
-						int y = entity->grid_position.y;
-						if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
-							if (entity->drop_interval >= entity->drop_interval_timer) {
-								if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
-								
-								float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
-
-								if (drop_time_left < entity->drop_duration_time) {
-									float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
-									float drop_size = 10 * drop_alpha;
-									Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
-									draw_centered_circle(entity->position, v2(drop_size, drop_size), drop_color);
-								}
-							}
-							else
+					if (entity == other_entity) continue;
+					if (collision) break;
+					switch(other_entity->entitytype) {
+						case(ENTITY_PLAYER):
+						case(ENTITY_BOSS):
+						case(ENTITY_OBSTACLE):{
+							if (circle_rect_collision(entity, other_entity)) 
 							{
-								entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
-								entity->drop_interval_timer = 0.0f;
-								Entity* drop_projectile = create_entity();
-								summon_projectile_drop(drop_projectile, entity);
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							} 
+						} break;
+
+						case(ENTITY_PROJECTILE): {
+							if (circle_circle_collision(entity, other_entity))
+							{
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
 							}
+						} break;
+
+						case(ENTITY_EFFECT): {
+							if (circle_circle_collision(entity, other_entity)) 
+							{
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
+								handle_projectile_collision(entity, other_entity);
+
+								collision = true;
+							}
+						} break;
+						default: { 
+							continue; 
+						} break;
+					}
+				}
+
+				if (entity->position.x <=  -PLAYABLE_WIDTH / 2 || entity->position.x >=  PLAYABLE_WIDTH / 2)
+				{
+					projectile_bounce_world(entity);
+					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
+				}
+
+				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2)
+				{
+					number_of_shots_missed++;
+					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
+					destroy_entity(entity);
+				}
+			}
+			
+			if (entity->obstacle_type == OBSTACLE_BEAM) {
+				if (entity->child != NULL) {
+					if (rect_rect_collision(entity->child, player->entity)) {
+						if (!player->is_immune) {
+							handle_beam_collision(entity->child, player);
+							player->is_immune = true; // Sätt spelaren som immun
+							player->immunity_timer = 1.0f; // Sätt timer för immunitet
 						}
 					}
-
-					// Wave Effect
-					if (entity->wave_time > 0.0f && entity->obstacle_type != OBSTACLE_BLOCK) {
-						update_wave_effect(entity);
-					}
-				}
-
-				if (entity->entitytype == ENTITY_PLAYER) {
-					limit_player_position(player);
-				}
-
-				if (entity->entitytype == ENTITY_BOSS) {
-					update_boss(entity);
 				}
 			}
 
+			if (entity->entitytype == ENTITY_OBSTACLE) 
+			{
+				if (entity->obstacle_type == OBSTACLE_DROP) {
+					int x = entity->grid_position.x;
+					int y = entity->grid_position.y;
+					if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
+						if (entity->drop_interval >= entity->drop_interval_timer) {
+							if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
+							
+							float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
+
+							if (drop_time_left < entity->drop_duration_time) {
+								float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
+								float drop_size = 10 * drop_alpha;
+								Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
+								draw_centered_circle(entity->position, v2(drop_size, drop_size), drop_color);
+							}
+						}
+						else
+						{
+							entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
+							entity->drop_interval_timer = 0.0f;
+							Entity* drop_projectile = create_entity();
+							summon_projectile_drop(drop_projectile, entity);
+						}
+					}
+				}
+
+				// Wave Effect
+				if (entity->wave_time > 0.0f && entity->obstacle_type != OBSTACLE_BLOCK) {
+					update_wave_effect(entity);
+				}
+			}
+
+			if (entity->entitytype == ENTITY_PLAYER) {
+				limit_player_position(player);
+			}
+
+			if (entity->entitytype == ENTITY_BOSS) {
+				update_boss(entity);
+			}
 		}
+
 		
 		// Set stuff in cbuffer which we need to pass to shaders
 		scene_cbuffer.mouse_pos_screen = v2(input_frame.mouse_x, input_frame.mouse_y);
 		scene_cbuffer.window_size = v2(window.width, window.height);
 		
-		tm_scope("Draw Lights") {
-			// Draw game with light shader to game_image
-			scene_cbuffer.light_count = 0; // clean the list
+		// Draw game with light shader to game_image
+		scene_cbuffer.light_count = 0; // clean the list
 
-			if (use_shaders) {
-				for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-				Entity* entity = &world->entities[i];
-					if (!entity->is_valid) continue;
-					if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
-					if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT ||
-						entity->entitytype == ENTITY_OBSTACLE) {
-						LightSource light;
-						light.type = 0;
-						light.position = v2_add(entity->position, v2(window.width / 2, window.height / 2));
-						light.intensity = 0.2f;
-						light.radius = 100.0f;
-						light.color = entity->color;
-						scene_cbuffer.lights[scene_cbuffer.light_count] = light;
-						scene_cbuffer.light_count++;
-					}
+		if (use_shaders) {
+			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			Entity* entity = &world->entities[i];
+				if (!entity->is_valid) continue;
+				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
+				if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT ||
+					entity->entitytype == ENTITY_OBSTACLE) {
+					LightSource light;
+					light.type = 0;
+					light.position = v2_add(entity->position, v2(window.width / 2, window.height / 2));
+					light.intensity = 0.2f;
+					light.radius = 100.0f;
+					light.color = entity->color;
+					scene_cbuffer.lights[scene_cbuffer.light_count] = light;
+					scene_cbuffer.light_count++;
 				}
 			}
 		}
+		
 		// Reset draw frame & clear the image with a clear color
-		tm_scope("draw_frame_reset()") {
-			draw_frame_reset(&offscreen_draw_frame);
-		}
+		draw_frame_reset(&offscreen_draw_frame);
 		
-		tm_scope("gfx_clear_render_target(game_image)") {
-			gfx_clear_render_target(game_image, v4(.7, .7, .7, 1.0));
-		}
+		
+		gfx_clear_render_target(game_image, v4(.7, .7, .7, 1.0));
+		
 		// Draw game things to offscreen Draw_Frame
-		tm_scope("Draw Game") {
-			draw_game(&offscreen_draw_frame);
-		}
-
-		tm_scope("Set the shader & cbuffer") {
-			// Set the shader & cbuffer before the render call
-			offscreen_draw_frame.shader_extension = light_shader;
-			offscreen_draw_frame.cbuffer = &scene_cbuffer;
-		}
+		draw_game(&offscreen_draw_frame);
 		
+
+		// Set the shader & cbuffer before the render call
+		offscreen_draw_frame.shader_extension = light_shader;
+		offscreen_draw_frame.cbuffer = &scene_cbuffer;
 		
 		// Render Draw_Frame to the image
 		///// NOTE: Drawing to one frame like this will wait for the gpu to finish the last draw call. If this becomes
 		// a performance bottleneck, you would have more frames "in flight" which you cycle through.
-		tm_scope("gfx_render_draw_frame(game_image)") {
-			gfx_render_draw_frame(&offscreen_draw_frame, game_image);
-		}
+		gfx_render_draw_frame(&offscreen_draw_frame, game_image);
 		
-		
-		///
 		// Draw game with bloom map shader to the bloom map
-		
 		// Reset draw frame & clear the image
-		tm_scope("draw_frame_reset()") {
-			draw_frame_reset(&offscreen_draw_frame);
-		}
-		
-		tm_scope("gfx_clear_render_target(bloom_map)") {
-			gfx_clear_render_target(bloom_map, COLOR_BLACK);
-		}
-
+		draw_frame_reset(&offscreen_draw_frame);
+		gfx_clear_render_target(bloom_map, COLOR_BLACK);
 		
 		// Draw game things to offscreen Draw_Frame
-		tm_scope("Draw Game") {
-			draw_game(&offscreen_draw_frame);
-		}
 		
-
+		draw_game(&offscreen_draw_frame);
+		
 		// Set the shader & cbuffer before the render call
 		offscreen_draw_frame.shader_extension = bloom_map_shader;
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
 		
-		// Render Draw_Frame to the image
-		///// NOTE: Drawing to one frame like this will wait for the gpu to finish the last draw call. If this becomes
-		// a performance bottleneck, you would have more frames "in flight" which you cycle through.
-		tm_scope("gfx_render_draw_frame(bloom_map)") {
-			gfx_render_draw_frame(&offscreen_draw_frame, bloom_map);
-		}
+		gfx_render_draw_frame(&offscreen_draw_frame, bloom_map);
 		
-		
-		///
 		// Draw game image into final image, using the bloom shader which samples from the bloom_map
-		tm_scope("draw_frame_reset()") {
-			draw_frame_reset(&offscreen_draw_frame);
-		}
-		tm_scope("gfx_clear_render_target(final_image)") {
-			gfx_clear_render_target(final_image, COLOR_BLACK);
-		}
+		draw_frame_reset(&offscreen_draw_frame);
+		
+		gfx_clear_render_target(final_image, COLOR_BLACK);
+		
 		// To sample from another image in the shader, we must bind it to a specific slot.
 
-		tm_scope("draw_frame_bind_image_to_shader(bloom_map)") {
-			draw_frame_bind_image_to_shader(&offscreen_draw_frame, bloom_map, 0);
-		}
+		draw_frame_bind_image_to_shader(&offscreen_draw_frame, bloom_map, 0);
+		
 		// Draw the game the final image, but now with the post process shader
-		tm_scope("draw_image_in_frame") {
-			draw_image_in_frame(game_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE, &offscreen_draw_frame);
-		}
+		draw_image_in_frame(game_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE, &offscreen_draw_frame);
+		
 		
 		offscreen_draw_frame.shader_extension = postprocess_bloom_shader;
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
-		tm_scope("gfx_render_draw_frame(final_image)") {
-			gfx_render_draw_frame(&offscreen_draw_frame, final_image);
-		}
-		tm_scope("draw_image(final_image)") {
-			draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
-
-		}
+		gfx_render_draw_frame(&offscreen_draw_frame, final_image);
+		
+		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 		
 		if (debug_mode) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
@@ -2315,7 +2268,7 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 			draw_timed_events();
 		}
-		
+
 		draw_effect_ui();
 
 		draw_graphics_settings_menu();

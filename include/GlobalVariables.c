@@ -3,7 +3,6 @@
 // -----------------------------------------------------------------------
 
 #define MAX_ENTITY_COUNT 1024
-#define MAX_EFFECT_COUNT 20
 #define MAX_LIGHTS 10
 
 #define PLAYABLE_WIDTH 400

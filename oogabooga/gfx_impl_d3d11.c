@@ -890,8 +890,6 @@ void gfx_render_draw_frame(Draw_Frame *frame, Gfx_Image *render_target) {
 		// Draw call
 		d3d11_draw_call(number_of_rendered_quads, textures, num_textures, bind_textures, frame->highest_bound_slot_index+1, frame, render_target);
     }
-    
-    
 }
 void gfx_render_draw_frame_to_window(Draw_Frame *frame) {
 	gfx_render_draw_frame(frame, 0);

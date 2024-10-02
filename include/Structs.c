@@ -91,7 +91,7 @@ typedef struct World {
 	Entity entities[MAX_ENTITY_COUNT];
 	ObstacleTuple obstacle_list[MAX_ENTITY_COUNT];
     TimedEvent timedevents[MAX_ENTITY_COUNT];
-	Effect effects[MAX_EFFECT_COUNT];
+	Effect effects[MAX_ENTITY_COUNT];
 
 	Vector4 world_background;
 } World;
