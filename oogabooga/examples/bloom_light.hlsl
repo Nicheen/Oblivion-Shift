@@ -27,6 +27,9 @@ float4 get_light_contribution(PS_INPUT input) {
         LightSource light = lights[i];
 
         float dist = length(light.position - vertex_pos);
+
+        if (dist > light.radius) continue; // Skip pixels outside of the light radius
+
         float attenuation = saturate(1.0 - (dist / light.radius)) * light.intensity;
 
         // Avoid negative contributions

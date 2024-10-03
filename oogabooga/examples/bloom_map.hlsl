@@ -30,6 +30,8 @@ float4 get_light_contribution(PS_INPUT input) {
 		// Calculate distance between the vertex and the light source
 		float dist = length(light.position - vertex_pos);
 
+		if (dist > light.radius) continue; // Skip pixels outside of the light radius
+
 		// Calculate attenuation based on distance and radius
 		float attenuation = saturate(1.0 - (dist / light.radius)) * light.intensity;
 
