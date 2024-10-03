@@ -1509,7 +1509,7 @@ void draw_effect_ui() {
 	}
 }
 
-void draw_main_screen() {
+void draw_starting_screen() {
 	if (is_starting_screen_active) {
 		is_game_paused = true;  // Ensure the game is paused when in the main screen
 
@@ -2042,7 +2042,9 @@ int entry(int argc, char **argv) {
 		
 		if (is_key_just_pressed(KEY_ESCAPE)) {
 			consume_key_just_pressed(KEY_ESCAPE);
-			if (is_graphics_settings_active) {
+			if (is_starting_screen_active) {
+				continue;
+			} else if (is_graphics_settings_active) {
 				is_graphics_settings_active = false;
 				is_settings_menu_active = true;
 			} else if (is_settings_menu_active) {
@@ -2329,7 +2331,7 @@ int entry(int argc, char **argv) {
 
 		draw_main_menu();
 
-		draw_main_screen();
+		draw_starting_screen();
 	
 		os_update();
 		gfx_update();
