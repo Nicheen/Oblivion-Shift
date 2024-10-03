@@ -642,6 +642,19 @@ void setup_boss_stage_10(Entity* entity) {
 	entity->second_timer = initialize_boss_attack_event(world);
 }
 
+void setup_boss_stage_20(Entity* entity) {
+	entity->entitytype = ENTITY_BOSS;
+
+	entity->health = 10;
+	entity->start_health = entity->health;
+	entity->color = rgba(240, 100, 100, 255);
+	entity->size = v2(50, 50);
+	entity->start_size = entity->size;
+
+	entity->timer = initialize_boss_movement_event(world);
+	entity->second_timer = initialize_boss_attack_event(world);
+}
+
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = ENTITY_OBSTACLE;
 
@@ -1762,7 +1775,14 @@ void stage_11_to_19() {
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
 	if (number_of_certain_particle(PFX_SNOW)) remove_all_particle_type(PFX_SNOW);
 }
+void stage_20_boss() {
+    Entity* boss = create_entity();
+    setup_boss_stage_10(boss);
 
+    int n_existing_particles = number_of_certain_particle(PFX_ASH);
+	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
+}
 void stage_21_to_29() {
 	float r = 0.5f;
 	float g = 0.2f;
@@ -1834,6 +1854,10 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	{
 		stage_11_to_19();
 	} 
+	else if (current_stage_level == 20) 
+	{
+		stage_20_boss();
+	}
 	else 
 	{
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
