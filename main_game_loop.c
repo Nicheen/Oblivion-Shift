@@ -630,7 +630,7 @@ void setup_effect(Effect* effect) {
 	effect->timer = initialize_effect_event(world, effect->effect_duration);
 }
 
-void setup_boss(Entity* entity) {
+void setup_boss_stage_10(Entity* entity) {
 	entity->entitytype = ENTITY_BOSS;
 
 	entity->health = 10;
@@ -1726,7 +1726,7 @@ void stage_0_to_9() {
 
 void stage_10_boss() {
     Entity* boss = create_entity();
-    setup_boss(boss);
+    setup_boss_stage_10(boss);
 
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
