@@ -7,9 +7,6 @@ typedef struct LightSource {
 	float intensity;
 	float radius;
 	Vector4 color;
-	int type;
-	Vector2 direction;
-	float length;
 } LightSource;
 
 // BEWARE std140 packing:

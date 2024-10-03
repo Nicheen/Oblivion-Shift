@@ -254,7 +254,6 @@ TimedEvent* initialize_effect_event(World* world, float duration) {
 
 void create_light_source(Vector2 position, Vector4 color, float size, Scene_Cbuffer* scene_cbuffer) {
 	LightSource light;
-	light.type = 0;
 	light.position = v2_add(position, v2(window.width / 2, window.height / 2));
 	light.intensity = 0.2f;
 	light.radius = size;

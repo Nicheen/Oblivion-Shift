@@ -26,47 +26,11 @@ float4 get_light_contribution(PS_INPUT input) {
     for (int i = 0; i < light_count; i++) {
         LightSource light = lights[i];
 
-        if (light.type == 0)  // Point light
-        {
-            float dist = length(light.position - vertex_pos);
-            float attenuation = saturate(1.0 - (dist / light.radius)) * light.intensity;
+        float dist = length(light.position - vertex_pos);
+        float attenuation = saturate(1.0 - (dist / light.radius)) * light.intensity;
 
-            // Avoid negative contributions
-            total_light_contribution.rgb += light.color.rgb * max(attenuation, 0);
-        } 
-        else if (light.type == 1)  // Line light
-        {
-            if (length(light.direction) > 0.0) {  // Ensure valid direction vector
-                float2 to_vertex = vertex_pos - light.position;
-                float2 line_dir = normalize(light.direction);
-                
-                // Project vertex position onto the light's direction
-                float proj_length = dot(to_vertex, line_dir);
-                
-                // Clamp the projection within the light's length
-                proj_length = clamp(proj_length, 0.0, light.length);
-                
-                // Calculate the closest point on the line segment
-                float2 closest_point = light.position + line_dir * proj_length;
-                
-                // Calculate the distance from the vertex to the closest point on the line
-                float dist_to_line = length(closest_point - vertex_pos);
-                
-                // If the distance to the line is within the light's radius, calculate attenuation
-                if (dist_to_line <= light.radius) {
-                    float attenuation = saturate(1.0 - (dist_to_line / light.radius)) * light.intensity;
-                    
-                    // Fade out near the ends of the line segment
-                    float end_fade = saturate(proj_length / light.radius) * 
-                                     saturate((light.length - proj_length) / light.radius);
-                    
-                    attenuation *= end_fade;
-
-                    // Avoid negative contributions
-                    total_light_contribution.rgb += light.color.rgb * max(attenuation, 0);
-                }
-            }
-        }
+        // Avoid negative contributions
+        total_light_contribution.rgb += light.color.rgb * max(attenuation, 0);
     }
 
     return total_light_contribution;
