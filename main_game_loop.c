@@ -648,7 +648,7 @@ void setup_boss_stage_20(Entity* entity) {
 	entity->health = 10;
 	entity->start_health = entity->health;
 	entity->color = rgba(240, 100, 100, 255);
-	entity->size = v2(50, 50);
+	entity->size = v2(80, 25);
 	entity->start_size = entity->size;
 
 	entity->timer = initialize_boss_movement_event(world);
@@ -1454,7 +1454,7 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     return pressed;
 }
 
-void draw_boss(Entity* entity, Draw_Frame* frame) {
+void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_velocity(entity->velocity);
@@ -1472,6 +1472,25 @@ void draw_boss(Entity* entity, Draw_Frame* frame) {
     draw_centered_in_frame_rect(v2_add(entity->position, v2(entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, frame);
     draw_centered_in_frame_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, frame);
 }
+
+void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
+    // Update the velocity based on the timer
+    if (timer_finished(entity->timer)) {
+        entity->velocity = update_boss_velocity(entity->velocity);
+    }    
+    // Draw the boss with the updated position and scaled size
+	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
+    
+    // Justera y-värdet för att rita cirkeln högre upp
+    Vector2 new_position = entity->position;
+    new_position.y += 10;  
+
+    draw_centered_in_frame_circle(new_position, v2(23, 48), entity->color, frame);
+
+	Vector2 position_kube = entity->position;
+    position_kube.y -= 7;  
+	draw_centered_in_frame_rect(position_kube, v2(18, 18), entity->color, frame);
+}	
 
 void draw_boss_health_bar(Draw_Frame* frame) {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -1759,14 +1778,17 @@ void stage_11_to_19() {
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
 	if (number_of_certain_particle(PFX_SNOW)) remove_all_particle_type(PFX_SNOW);
 }
+
 void stage_20_boss() {
+	float stage_progress = current_stage_level - 10;
     Entity* boss = create_entity();
-    setup_boss_stage_10(boss);
+    setup_boss_stage_20(boss);
 
     int n_existing_particles = number_of_certain_particle(PFX_ASH);
-	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
+	int particles_to_spawn = calculate_particles_to_spawn((float)stage_progress / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
 }
+
 void stage_21_to_29() {
 	float r = 0.5f;
 	float g = 0.2f;
@@ -1834,7 +1856,7 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	{
 		stage_10_boss();
 	} 
-	else if (current_stage_level <= 20) 
+	else if (current_stage_level <= 19) 
 	{
 		stage_11_to_19();
 	} 
@@ -1916,8 +1938,11 @@ void draw_game(Draw_Frame *frame) {
 			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
 		}
 
-		if (entity->entitytype == ENTITY_BOSS) {
-			draw_boss(entity, frame);
+		if (entity->entitytype == ENTITY_BOSS && current_stage_level == 10) {
+			draw_boss_stage_10(entity, frame);
+		}
+		if (entity->entitytype == ENTITY_BOSS && current_stage_level == 20) {
+			draw_boss_stage_20(entity, frame);
 		}
 	}
 
