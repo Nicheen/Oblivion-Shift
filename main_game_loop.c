@@ -502,9 +502,21 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 	}
 }
 
-int calculate_particles_to_spawn(int current_stage_level, int n_existing_particles, float spawn_rate_factor) {
-    return (int)(spawn_rate_factor * pow(2.0f, (float)current_stage_level / 10)) - n_existing_particles;
+int calculate_particles_to_spawn(float alpha, int number_of_existing_particles, float max_particles) {
+    // Ensure alpha is within the range [0, 1]
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+
+    // Exponential growth curve (alpha^2)
+    float target_particles = max_particles * (alpha * alpha);
+
+    // Calculate the difference between target and existing particles
+    int particles_to_spawn = (int)target_particles - number_of_existing_particles;
+
+    // Ensure non-negative spawn count
+    return (particles_to_spawn > 0) ? particles_to_spawn : 0;
 }
+
 
 // -----------------------------------------------------------------------
 //               SUMMON / SETUP / INITIALIZE FUNCTIONS
@@ -1708,7 +1720,7 @@ void stage_0_to_9() {
     summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
-	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 1000.0f);
+	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
@@ -1717,7 +1729,7 @@ void stage_10_boss() {
     setup_boss(boss);
 
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
-	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 1000.0f);
+	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
@@ -1731,7 +1743,7 @@ void stage_11_to_19() {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	int n_existing_particles = number_of_certain_particle(PFX_ASH);
-	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 500.0f);
+	int particles_to_spawn = calculate_particles_to_spawn((float)stage_progress / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
 	if (number_of_certain_particle(PFX_SNOW)) remove_all_particle_type(PFX_SNOW);
 }
