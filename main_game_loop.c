@@ -163,7 +163,9 @@ bool timer_finished(TimedEvent* timed_event) {
 		}
 		
 		timed_event->interval_timer -= timed_event->interval; // Reset the timer
-		if (!(timed_event->counter == -1)) { timed_event->counter++; }
+
+		if (timed_event->counter != -1) timed_event->counter++; 
+		
 		return true;
 	}
 	else if (timed_event->interval_timer >= timed_event->interval) {
@@ -321,7 +323,7 @@ void particle_update() {
 }
 
 int particle_render(Draw_Frame* frame) {
-	int number_of_particles = 0;
+	number_of_particles = 0;
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
 		Particle* p = &particles[i];
 		if (!(p->flags & PARTICLE_FLAGS_valid)) {
@@ -420,7 +422,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->immortal = true;
 				p->identifier = a;
 			}
-		}
+		} break;
 		case PFX_LEAF: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
@@ -439,7 +441,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->immortal = true;
 				p->identifier = a;
 			}
-		}
+		} break;
 		case PFX_RAIN: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
@@ -458,7 +460,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->immortal = true;
 				p->identifier = a;
 			}
-		}
+		} break;
 
 		case PFX_WIND: { 			//DENNA ÄR RIKTIGT FUL...
 			for (int i = 0; i < n_particles; i++) {
@@ -478,7 +480,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->immortal = true; // Partiklarna ska finnas kvar
 				p->identifier = a; // Identifiera partikeln
 			}
-		}
+		} break;
 		case PFX_SNOW: {
 			for (int i = 0; i < n_particles; i++) {
 				Particle* p = particle_new();
@@ -494,10 +496,14 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				p->immortal = true;
 				p->identifier = a;
 			}
-		}
+		} break;
 
 		default: { log("Something went wrong with particle generation"); } break;
 	}
+}
+
+int calculate_particles_to_spawn(int current_stage_level, int n_existing_particles, float spawn_rate_factor) {
+    return (int)(spawn_rate_factor * pow(2.0f, (float)current_stage_level / 10)) - n_existing_particles;
 }
 
 // -----------------------------------------------------------------------
@@ -773,6 +779,46 @@ string effect_pretty_text(int type) {
 //                     UNCATEGORIZED FUNCTIONS
 // -----------------------------------------------------------------------
 
+string view_mode_stringify(View_Mode vm) {
+	switch (vm) {
+		case VIEW_GAME_AFTER_POSTPROCESS:
+			return STR("VIEW_GAME_AFTER_POSTPROCESS");
+		case VIEW_GAME_BEFORE_POSTPROCESS:
+			return STR("VIEW_GAME_BEFORE_POSTPROCESS");
+		case VIEW_BLOOM_MAP:
+			return STR("VIEW_BLOOM_MAP");
+		default: return STR("");
+	}
+}
+
+string get_timed_event_type_text(int timer_type) {
+	switch (timer_type) {
+		case TIMED_EVENT_COLOR_SWITCH: 
+			return STR("Color Switch");
+		case TIMED_EVENT_BEAM: 
+			return STR("Laser Beam");
+		case TIMED_EVENT_BOSS_MOVEMENT: 
+			return STR("Boss Movement");
+		case TIMED_EVENT_BOSS_ATTACK: 
+			return STR("Boss Attack");
+		case TIMED_EVENT_EFFECT: 
+			return STR("Effect");
+		default: 
+			return STR("ERROR");
+	}
+}
+
+string get_timed_event_world_type_text(int timer_world_type) {
+	switch (timer_world_type) {
+		case TIMED_EVENT_TYPE_WORLD: 
+			return STR("World");
+		case TIMED_EVENT_TYPE_ENTITY: 
+			return STR("Entity");
+		default: 
+			return STR("ERROR");
+	}
+}
+
 Vector2 MOUSE_POSITION() {
 	float mouseX = input_frame.mouse_x;
 	float mouseY = input_frame.mouse_y;
@@ -976,25 +1022,25 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset) {
     if (!te->is_valid) return;
 
     // Start the string with basic info
-    string temp = sprintf(get_temporary_allocator(), "TimedEvent %d - Type: %d", index, te->type);
+    string temp = sprintf(get_temporary_allocator(), "%s (%s)", get_timed_event_type_text(te->type), get_timed_event_world_type_text(te->worldtype));
 
     // Append other parameters conditionally
     if (te->interval != 0.0f) {
         temp = sprint(get_temporary_allocator(), STR("%s, Interval: %.2f"), temp, te->interval);
     }
-    if (te->interval_timer != 0.0f) {
+	if (te->duration != 0.0f) {
+        temp = sprint(get_temporary_allocator(), STR("%s, Duration: %.2f"), temp, te->duration);
+    }
+    if (te->interval != 0.0f) {
         temp = sprint(get_temporary_allocator(), STR("%s, I-timer: %.2f"), temp, te->interval_timer);
     }
     if (te->duration != 0.0f) {
-        temp = sprint(get_temporary_allocator(), STR("%s, Duration: %.2f"), temp, te->duration);
-    }
-    if (te->duration_timer != 0.0f) {
         temp = sprint(get_temporary_allocator(), STR("%s, D-timer: %.2f"), temp, te->duration_timer);
     }
-    if (te->progress != 0.0f) {
+    if (te->interval != 0.0f) {
         temp = sprint(get_temporary_allocator(), STR("%s, Progress: %.2f"), temp, te->progress);
     }
-    if (te->counter <= 0) {
+    if (te->counter >= 0) {
         temp = sprint(get_temporary_allocator(), STR("%s, Counter: %d"), temp, te->counter);
     }
 
@@ -1009,18 +1055,6 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset) {
 
     // Increase the y_offset for the next valid TimedEvent
     *y_offset += 25;  // Increase this value to adjust the vertical spacing between events
-}
-
-string view_mode_stringify(View_Mode vm) {
-	switch (vm) {
-		case VIEW_GAME_AFTER_POSTPROCESS:
-			return STR("VIEW_GAME_AFTER_POSTPROCESS");
-		case VIEW_GAME_BEFORE_POSTPROCESS:
-			return STR("VIEW_GAME_BEFORE_POSTPROCESS");
-		case VIEW_BLOOM_MAP:
-			return STR("VIEW_BLOOM_MAP");
-		default: return STR("");
-	}
 }
 
 // -----------------------------------------------------------------------
@@ -1673,31 +1707,33 @@ void stage_0_to_9() {
     world->world_background = v4(r, g, b, 1.0f); // Background color
     summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
-    int n_snow_particles = number_of_certain_particle(PFX_SNOW);
-    // Exponential snow spawn rate (closer to boss = more snow)
-    int snow_to_spawn = (int)(1000 * pow(2.0f, (float)current_stage_level / 10)) - n_snow_particles;
-    particle_emit(v2(0, 0), v4(0, 0, 0, 0), snow_to_spawn, PFX_SNOW);
+    int n_existing_particles = number_of_certain_particle(PFX_SNOW);
+	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 1000.0f);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
 void stage_10_boss() {
     Entity* boss = create_entity();
     setup_boss(boss);
 
-    int n_snow_particles = number_of_certain_particle(PFX_SNOW);
-    // Exponential snow spawn rate during boss stage
-    int snow_to_spawn = (int)(1000 * pow(2.0f, (float)current_stage_level / 10)) - n_snow_particles;
-    particle_emit(v2(0, 0), v4(0, 0, 0, 0), snow_to_spawn, PFX_SNOW);
+    int n_existing_particles = number_of_certain_particle(PFX_SNOW);
+	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 1000.0f);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
-
 void stage_11_to_19() {
-	//remove_all_particle_type(PFX_SNOW);
+	
 	float stage_progress = current_stage_level - 10;
 	float r = (float)stage_progress / 20.0f;
 	float g = 0.0f;
 	float b = 0.0f;
 	world->world_background = v4(r, g, b, 1.0f); // Background color
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+
+	int n_existing_particles = number_of_certain_particle(PFX_ASH);
+	int particles_to_spawn = calculate_particles_to_spawn(current_stage_level, n_existing_particles, 500.0f);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_ASH);
+	if (number_of_certain_particle(PFX_SNOW)) remove_all_particle_type(PFX_SNOW);
 }
 
 void stage_21_to_29() {
@@ -1773,11 +1809,6 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	} 
 	else 
 	{
-		remove_all_particle_type(PFX_SNOW);
-		remove_all_particle_type(PFX_ASH);
-		remove_all_particle_type(PFX_LEAF);
-		remove_all_particle_type(PFX_RAIN);
-		remove_all_particle_type(PFX_WIND);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
 }
@@ -2207,7 +2238,8 @@ int entry(int argc, char **argv) {
 				Entity* entity = &world->entities[i];
 				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
 				if (!entity->is_valid) continue;
-				if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT ||
+				if (entity->entitytype == ENTITY_PROJECTILE || 
+				    entity->entitytype == ENTITY_EFFECT ||
 					entity->entitytype == ENTITY_OBSTACLE) {
 					create_light_source(entity->position, entity->color, 100.0f, &scene_cbuffer);
 				}
@@ -2219,7 +2251,7 @@ int entry(int argc, char **argv) {
 				if (!(p->flags & PARTICLE_FLAGS_valid)) {
 					continue;
 				}
-				if (p->kind != PFX_SNOW) {
+				if (p->kind == PFX_EFFECT || p->kind == PFX_BOUNCE) {
 					create_light_source(p->pos, p->col, 10.0f, &scene_cbuffer);
 				}
 			}
@@ -2280,7 +2312,7 @@ int entry(int argc, char **argv) {
 		
 		if (debug_mode) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i"), latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
