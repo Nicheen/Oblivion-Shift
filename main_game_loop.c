@@ -27,7 +27,7 @@ int current_stage_level = 0;
 int obstacle_count = 0;
 int light_count = 0;
 int latest_fps = 0;
-int latest_entites = 0;
+int entity_counter = 0;
 const u32 font_height = 48;
 LightSource lights[100];
 
@@ -52,7 +52,7 @@ bool is_game_running = false;
 
 bool is_main_menu_active = false;
 bool is_settings_menu_active = false;
-bool is_game_paused = false;
+bool is_game_paused = true;
 bool is_graphics_settings_active = false;
 
 //
@@ -1274,7 +1274,8 @@ void limit_player_position(Player* player){
 // -----------------------------------------------------------------------
 //                   UPDATE FUNCTIONS FOR UPDATE LOOP
 // -----------------------------------------------------------------------
-void update_boss(Entity* entity) {
+void update_boss(Entity* entity) 
+{
 	if (timer_finished(entity->second_timer)) {
 		Entity* p1 = create_entity();
 		Entity* p2 = create_entity();
@@ -1283,7 +1284,8 @@ void update_boss(Entity* entity) {
 	}
 }
 
-Vector2 update_boss_velocity(Vector2 velocity) {
+Vector2 update_boss_velocity(Vector2 velocity) 
+{
     // Example of modifying the velocity based on a sine wave
     float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
     float new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); // Modify x velocity
@@ -1292,7 +1294,8 @@ Vector2 update_boss_velocity(Vector2 velocity) {
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
 
-void update_wave_effect(Entity* entity) {
+void update_wave_effect(Entity* entity) 
+{
 	if (!(is_game_paused)) entity->wave_time -= delta_t;
 
 	if (entity->wave_time < 0.0f) {
@@ -1310,6 +1313,19 @@ void update_wave_effect(Entity* entity) {
 	}
 
 	entity->size = v2_add(entity->start_size, v2(size_value, size_value));
+}
+
+void update_obstacle_beam(Entity* entity) 
+{
+	if (entity->child != NULL) {
+		if (rect_rect_collision(entity->child, player->entity)) {
+			if (!player->is_immune) {
+				handle_beam_collision(entity->child, player);
+				player->is_immune = true; // Sätt spelaren som immun
+				player->immunity_timer = 1.0f; // Sätt timer för immunitet
+			}
+		}
+	}
 }
 
 // -----------------------------------------------------------------------
@@ -1871,7 +1887,11 @@ void initialize_new_stage(World* world, int current_stage_level) {
 }
 
 // -----------------------------------------------------------------------
-//                   FUNCTION FOR DRAWING THE ENTIRE GAME
+//
+//
+//                           THE BIG FUNCTIONS
+//
+//
 // -----------------------------------------------------------------------
 
 void draw_game(Draw_Frame *frame) {
@@ -1983,6 +2003,120 @@ void draw_game(Draw_Frame *frame) {
 	draw_death_borders(color_switch_event, frame);
 
 	
+}
+
+void update_game() {
+	entity_counter = 0;
+
+	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Entity* entity = &world->entities[i];
+		if (!entity->is_valid) continue;
+		entity_counter++;
+
+		// Update position from velocity if the game is not paused
+		if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
+
+		switch (entity->entitytype) {
+			case ENTITY_PROJECTILE: {
+				bool collision = false;
+				for (int j = 0; j < MAX_ENTITY_COUNT; j++) {
+					Entity* other_entity = &world->entities[j];
+					if (!other_entity->is_valid) continue;
+					if (entity == other_entity) continue;
+					if (collision) break;
+
+					switch (other_entity->entitytype) {
+						case ENTITY_PLAYER:
+						case ENTITY_BOSS:
+						case ENTITY_OBSTACLE: {
+							if (circle_rect_collision(entity, other_entity)) {
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							}
+						} break;
+
+						case ENTITY_PROJECTILE: {
+							if (circle_circle_collision(entity, other_entity)) {
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							}
+						} break;
+
+						case ENTITY_EFFECT: {
+							if (circle_circle_collision(entity, other_entity)) {
+								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
+								handle_projectile_collision(entity, other_entity);
+								collision = true;
+							}
+						} break;
+
+						default: break;
+					}
+				}
+
+				// Check projectile bounds
+				if (entity->position.x <= -PLAYABLE_WIDTH / 2 || entity->position.x >= PLAYABLE_WIDTH / 2) {
+					projectile_bounce_world(entity);
+					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
+				}
+
+				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2) {
+					number_of_shots_missed++;
+					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
+					destroy_entity(entity);
+				}
+			} break;
+
+			case ENTITY_OBSTACLE: {
+				switch (entity->obstacle_type) {
+					case OBSTACLE_DROP: {
+						int x = entity->grid_position.x;
+						int y = entity->grid_position.y;
+						if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
+							if (entity->drop_interval >= entity->drop_interval_timer) {
+								if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
+
+								float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
+								if (drop_time_left < entity->drop_duration_time) {
+									float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
+									float drop_size = 10 * drop_alpha;
+									Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
+									draw_centered_circle(entity->position, v2(drop_size, drop_size), drop_color);
+								}
+							} else {
+								entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
+								entity->drop_interval_timer = 0.0f;
+								Entity* drop_projectile = create_entity();
+								summon_projectile_drop(drop_projectile, entity);
+							}
+						}
+					} break;
+
+					case OBSTACLE_BEAM: {
+						update_obstacle_beam(entity);
+					} break;
+
+					default: break;
+				}
+
+				// Handle wave effects for obstacles (if applicable)
+				if (entity->wave_time > 0.0f && entity->obstacle_type != OBSTACLE_BLOCK) {
+					update_wave_effect(entity);
+				}
+			} break;
+
+			case ENTITY_PLAYER: {
+				limit_player_position(player);
+			} break;
+
+			case ENTITY_BOSS: {
+				update_boss(entity);
+			} break;
+
+			default: break;
+		}
+	}
 }
 
 int entry(int argc, char **argv) {
@@ -2160,134 +2294,8 @@ int entry(int argc, char **argv) {
 			update_player_position(player);
 		}
 
-		// -----------------------------------------------------------------------
-		//               Entity Loop for updating and collisions
-		// -----------------------------------------------------------------------
-		int entity_counter = 0;
-		
-		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-			Entity* entity = &world->entities[i];
-			if (!entity->is_valid) continue;
-			entity_counter++;
+		update_game();
 
-			// Update positon from velocity of entity if game is not paused
-			if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
-			
-			if (entity->entitytype == ENTITY_PROJECTILE) 
-			{
-				bool collision = false;
-				for (int j = 0; j < MAX_ENTITY_COUNT; j++) 
-				{
-					Entity* other_entity = &world->entities[j];
-					if (!other_entity->is_valid) continue;
-
-					if (entity == other_entity) continue;
-					if (collision) break;
-					switch(other_entity->entitytype) {
-						case(ENTITY_PLAYER):
-						case(ENTITY_BOSS):
-						case(ENTITY_OBSTACLE):{
-							if (circle_rect_collision(entity, other_entity)) 
-							{
-								handle_projectile_collision(entity, other_entity);
-								collision = true;
-							} 
-						} break;
-
-						case(ENTITY_PROJECTILE): {
-							if (circle_circle_collision(entity, other_entity))
-							{
-								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
-								handle_projectile_collision(entity, other_entity);
-								collision = true;
-							}
-						} break;
-
-						case(ENTITY_EFFECT): {
-							if (circle_circle_collision(entity, other_entity)) 
-							{
-								particle_emit(other_entity->position, other_entity->color, 4, PFX_EFFECT);
-								handle_projectile_collision(entity, other_entity);
-
-								collision = true;
-							}
-						} break;
-						default: { 
-							continue; 
-						} break;
-					}
-				}
-
-				if (entity->position.x <=  -PLAYABLE_WIDTH / 2 || entity->position.x >=  PLAYABLE_WIDTH / 2)
-				{
-					projectile_bounce_world(entity);
-					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
-				}
-
-				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2)
-				{
-					number_of_shots_missed++;
-					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
-					destroy_entity(entity);
-				}
-			}
-			
-			if (entity->obstacle_type == OBSTACLE_BEAM) {
-				if (entity->child != NULL) {
-					if (rect_rect_collision(entity->child, player->entity)) {
-						if (!player->is_immune) {
-							handle_beam_collision(entity->child, player);
-							player->is_immune = true; // Sätt spelaren som immun
-							player->immunity_timer = 1.0f; // Sätt timer för immunitet
-						}
-					}
-				}
-			}
-
-			if (entity->entitytype == ENTITY_OBSTACLE) 
-			{
-				if (entity->obstacle_type == OBSTACLE_DROP) {
-					int x = entity->grid_position.x;
-					int y = entity->grid_position.y;
-					if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
-						if (entity->drop_interval >= entity->drop_interval_timer) {
-							if (!(is_game_paused)) entity->drop_interval_timer += delta_t;
-							
-							float drop_time_left = entity->drop_interval - entity->drop_interval_timer;
-
-							if (drop_time_left < entity->drop_duration_time) {
-								float drop_alpha = (float)(entity->drop_duration_time - drop_time_left) / entity->drop_duration_time;
-								float drop_size = 10 * drop_alpha;
-								Vector4 drop_color = v4_lerp(COLOR_GREEN, COLOR_RED, drop_alpha);
-								draw_centered_circle(entity->position, v2(drop_size, drop_size), drop_color);
-							}
-						}
-						else
-						{
-							entity->drop_interval = get_random_float32_in_range(15.0f, 30.0f);
-							entity->drop_interval_timer = 0.0f;
-							Entity* drop_projectile = create_entity();
-							summon_projectile_drop(drop_projectile, entity);
-						}
-					}
-				}
-
-				// Wave Effect
-				if (entity->wave_time > 0.0f && entity->obstacle_type != OBSTACLE_BLOCK) {
-					update_wave_effect(entity);
-				}
-			}
-
-			if (entity->entitytype == ENTITY_PLAYER) {
-				limit_player_position(player);
-			}
-
-			if (entity->entitytype == ENTITY_BOSS) {
-				update_boss(entity);
-			}
-		}
-
-		
 		// Set stuff in cbuffer which we need to pass to shaders
 		scene_cbuffer.mouse_pos_screen = v2(input_frame.mouse_x, input_frame.mouse_y);
 		scene_cbuffer.window_size = v2(window.width, window.height);
@@ -2375,7 +2383,7 @@ int entry(int argc, char **argv) {
 		if (debug_mode) {
 			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), latest_entites), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), entity_counter), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
@@ -2400,7 +2408,6 @@ int entry(int argc, char **argv) {
 		frame_count += 1;
 		if (seconds_counter > 1.0) {
 			latest_fps = frame_count;
-			latest_entites = entity_counter;
 			seconds_counter = 0.0;
 			frame_count = 0;
 		}
