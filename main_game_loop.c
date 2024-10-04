@@ -29,7 +29,9 @@ int light_count = 0;
 int latest_fps = 0;
 int entity_counter = 0;
 const u32 font_height = 48;
-LightSource lights[100];
+LightSource lights[MAX_LIGHTS];
+float stage_times[100];
+float stage_timer;
 
 Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
@@ -922,6 +924,7 @@ void clean_world() {
         }
 	}
 
+	stage_timer = 0;
 	obstacle_count = 0;
 	number_of_block_obstacles = 0;
 }
@@ -1781,6 +1784,37 @@ void draw_timed_events() {
     }
 }
 
+void draw_stage_timers() {
+    u32 font_height = 48;
+    float base_y = 100; // Base Y position for the green text
+	if (debug_mode) { base_y -= 200; };
+	float base_x = -350; // Base X position for the green text
+    float spacing = 25; // Spacing between texts
+
+    // Draw the green text (current stage timer)
+    string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_timer);
+    draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), COLOR_GREEN);
+
+    // Limit the number of white texts to be drawn to a max of 5
+    int max_white_times = 5;
+    int times_to_draw = min(current_stage_level, max_white_times);
+
+    // Draw white times below the green text, newest at the top with fading effect
+    for (int i = 0; i < times_to_draw; i++) {
+        // Calculate transparency based on position: newest is opaque, older ones fade
+        float alpha = 1.0f - (i / (float)max_white_times);
+
+        // Set fading white color with variable alpha
+        Vector4 faded_white = v4(COLOR_WHITE.r, COLOR_WHITE.g, COLOR_WHITE.b, alpha);
+
+        // Newest time should appear right below the green text
+        string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_times[current_stage_level - i]);
+        draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
+    }
+}
+
+
+
 // -----------------------------------------------------------------------
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
@@ -1887,7 +1921,9 @@ void stage_51_to_59() {
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
 void initialize_new_stage(World* world, int current_stage_level) {
-
+	
+	stage_times[current_stage_level] = stage_timer;
+	
 	clean_world();
 
 	if (current_stage_level <= 9) 
@@ -2180,10 +2216,7 @@ int entry(int argc, char **argv) {
 	// postprocess shader where the bloom happens. It samples from the generated bloom_map.
 	postprocess_bloom_shader = load_shader(STR("oogabooga/examples/bloom.hlsl"), sizeof(Scene_Cbuffer));
 
-	
-
 	Scene_Cbuffer scene_cbuffer;
-
 	
 	Gfx_Image *bloom_map = 0;
 	Gfx_Image *game_image = 0;
@@ -2238,6 +2271,7 @@ int entry(int argc, char **argv) {
 		
 		delta_t = now - last_time;
 		last_time = now;
+		if (is_game_running) stage_timer += delta_t;
 
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
@@ -2421,6 +2455,8 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 			draw_timed_events();
 		}
+
+		draw_stage_timers();
 
 		draw_effect_ui();
 
