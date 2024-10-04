@@ -592,6 +592,15 @@ void summon_icicle(Entity* entity, Vector2 spawn_pos) {
 	entity->velocity = v2(0, -200);
 }
 
+void summon_beam(Entity* entity, Entity* beam) {
+	beam->color = v4(1, 0, 0, 0.7);
+	float beam_height = entity->size.y + window.height;
+	beam->size = v2(5, beam_height);
+	float beam_y_position = entity->position.y - beam_height / 2 - entity->size.y / 2;
+	beam->position = v2(entity->position.x, beam_y_position);
+
+}
+
 void setup_effect(Effect* effect) {
 
 	float random_value = get_random_float64_in_range(0, 1);
@@ -1274,7 +1283,7 @@ void limit_player_position(Player* player){
 // -----------------------------------------------------------------------
 //                   UPDATE FUNCTIONS FOR UPDATE LOOP
 // -----------------------------------------------------------------------
-void update_boss(Entity* entity) 
+void update_boss_stage_10(Entity* entity) 
 {
 	if (timer_finished(entity->second_timer)) {
 		Entity* p1 = create_entity();
@@ -1284,7 +1293,24 @@ void update_boss(Entity* entity)
 	}
 }
 
-Vector2 update_boss_velocity(Vector2 velocity) 
+Vector2 update_boss_stage_10_velocity(Vector2 velocity) 
+{
+    // Example of modifying the velocity based on a sine wave
+    float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
+    float new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); // Modify x velocity
+    float new_velocity_y = velocity_amplitude * (sin(now + 0.5f) + 0.3f * sin(3.0f * now)); // Modify y velocity
+
+    return v2(new_velocity_x, new_velocity_y); // Return updated velocity
+}
+
+void update_boss_stage_20(Entity* entity) 
+{
+	if (timer_finished(entity->second_timer)) {
+		Entity* p1 = create_entity();
+		summon_beam(p1, entity);
+	}
+}
+Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
     // Example of modifying the velocity based on a sine wave
     float velocity_amplitude = get_random_float32_in_range(10.0, 15.0); // Amplitude for velocity changes
@@ -1473,7 +1499,7 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
 void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
-        entity->velocity = update_boss_velocity(entity->velocity);
+        entity->velocity = update_boss_stage_10_velocity(entity->velocity);
     }
     // Amplitudes for the movement (lower values for more subtle movement)
     float amplitude_x = 5.0f; // Reduced amplitude for x-axis
@@ -1492,7 +1518,7 @@ void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
 void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
-        entity->velocity = update_boss_velocity(entity->velocity);
+        entity->velocity = update_boss_stage_10_velocity(entity->velocity);
     }    
     // Draw the boss with the updated position and scaled size
 	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
@@ -2111,7 +2137,12 @@ void update_game() {
 			} break;
 
 			case ENTITY_BOSS: {
-				update_boss(entity);
+				if (current_stage_level == 10){
+					update_boss_stage_10(entity);
+				}
+				if (current_stage_level == 20){
+					update_boss_stage_20(entity);
+				}
 			} break;
 
 			default: break;
