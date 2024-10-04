@@ -220,12 +220,27 @@ TimedEvent* initialize_boss_movement_event(World* world) {
     return te;
 }
 
-TimedEvent* initialize_boss_attack_event(World* world) {
+TimedEvent* initialize_boss_attack_event_stage_10(World* world) {
 	TimedEvent* te = create_timedevent(world);
 
     te->type = TIMED_EVENT_BOSS_ATTACK;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
     te->interval = 2.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_boss_attack_event_20(World* world) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_BOSS_ATTACK;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = 5.0f; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -594,14 +609,16 @@ void summon_icicle(Entity* entity, Vector2 spawn_pos) {
 	entity->velocity = v2(0, -200);
 }
 
-void summon_beam(Entity* entity, Entity* beam) {
-	beam->color = v4(1, 0, 0, 0.7);
-	float beam_height = entity->size.y + window.height;
-	beam->size = v2(5, beam_height);
-	float beam_y_position = entity->position.y - beam_height / 2 - entity->size.y / 2;
-	beam->position = v2(entity->position.x, beam_y_position);
+void summon_beam(Entity* entity, Vector2 spawn_pos) {
+    entity->obstacle_type = OBSTACLE_BEAM;
 
+    TimedEvent* timed_event = initialize_beam_event(world);
+	entity->timer = timed_event;
+    entity->drop_interval = get_random_float32_in_range(3.0f, 5.0f);  // Tid mellan strålar
+    entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
+    entity->drop_interval_timer = 0.0f;
 }
+
 
 void setup_effect(Effect* effect) {
 
@@ -650,7 +667,7 @@ void setup_boss_stage_10(Entity* entity) {
 	entity->start_size = entity->size;
 
 	entity->timer = initialize_boss_movement_event(world);
-	entity->second_timer = initialize_boss_attack_event(world);
+	entity->second_timer = initialize_boss_attack_event_stage_10(world);
 }
 
 void setup_boss_stage_20(Entity* entity) {
@@ -663,7 +680,7 @@ void setup_boss_stage_20(Entity* entity) {
 	entity->start_size = entity->size;
 
 	entity->timer = initialize_boss_movement_event(world);
-	entity->second_timer = initialize_boss_attack_event(world);
+	entity->second_timer = initialize_beam_event(world);
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
@@ -1308,11 +1325,14 @@ Vector2 update_boss_stage_10_velocity(Vector2 velocity)
 
 void update_boss_stage_20(Entity* entity) 
 {
-	if (timer_finished(entity->second_timer)) {
-		Entity* p1 = create_entity();
-		summon_beam(p1, entity);
-	}
+    if (timer_finished(entity->second_timer)) {
+        // Kontrollera om beamen redan finns
+        Entity* p1 = create_entity(); // Skapa en ny beam
+        summon_beam(p1, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
+    }
 }
+
+
 Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
     // Example of modifying the velocity based on a sine wave
@@ -1522,6 +1542,8 @@ void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_stage_10_velocity(entity->velocity);
+		draw_beam(entity, frame);
+
     }    
     // Draw the boss with the updated position and scaled size
 	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
