@@ -1787,13 +1787,16 @@ void draw_timed_events() {
 void draw_stage_timers() {
     u32 font_height = 48;
     float base_y = 100; // Base Y position for the green text
-	if (debug_mode) { base_y -= 200; };
+	if (debug_mode) { base_y -= 200; }; // Shift the draw element if debug mode is enabled
 	float base_x = -350; // Base X position for the green text
     float spacing = 25; // Spacing between texts
 
+	Vector4 current_timer_color = COLOR_GREEN;
+	Vector4 other_times_color = COLOR_WHITE;
+
     // Draw the green text (current stage timer)
     string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_timer);
-    draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), COLOR_GREEN);
+    draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), current_timer_color);
 
     // Limit the number of white texts to be drawn to a max of 5
     int max_white_times = 5;
@@ -1805,7 +1808,7 @@ void draw_stage_timers() {
         float alpha = 1.0f - (i / (float)max_white_times);
 
         // Set fading white color with variable alpha
-        Vector4 faded_white = v4(COLOR_WHITE.r, COLOR_WHITE.g, COLOR_WHITE.b, alpha);
+        Vector4 faded_white = v4(other_times_color.r, other_times_color.g, other_times_color.b, alpha);
 
         // Newest time should appear right below the green text
         string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_times[current_stage_level - i]);
