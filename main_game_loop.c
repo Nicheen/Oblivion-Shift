@@ -1323,15 +1323,26 @@ Vector2 update_boss_stage_10_velocity(Vector2 velocity)
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
 
+Vector2 update_boss_stage_20_position(Vector2 current_position) 
+{
+    // Definiera teleportationsområden eller slumpa fram en ny position
+    float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);  // Slumpa x-position inom skärmens bredd
+    float new_y = get_random_float32_in_range(-(window.height/2) + 200, (window.height/2) - 100);     // Slumpa y-position inom övre halvan av skärmen
+
+    Vector2 new_position = v2(new_x, new_y);  // Skapa en ny position med slumpmässiga värden
+
+    return new_position;  // Returnera den nya positionen
+}
+
 void update_boss_stage_20(Entity* entity) 
 {
     if (timer_finished(entity->second_timer)) {
         // Kontrollera om beamen redan finns
         Entity* p1 = create_entity(); // Skapa en ny beam
         summon_beam(p1, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
+		entity->position = update_boss_stage_20_position(entity->position);
     }
 }
-
 
 Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
@@ -1342,6 +1353,7 @@ Vector2 update_boss_stage_20_velocity(Vector2 velocity)
 
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
+
 
 void update_wave_effect(Entity* entity) 
 {
@@ -1542,8 +1554,6 @@ void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_stage_10_velocity(entity->velocity);
-		draw_beam(entity, frame);
-
     }    
     // Draw the boss with the updated position and scaled size
 	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
