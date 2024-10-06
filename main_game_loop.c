@@ -198,7 +198,7 @@ TimedEvent* initialize_beam_event(World* world) {
 	te->worldtype = TIMED_EVENT_TYPE_ENTITY;
 	te->interval = 10.0f;
 	te->interval_timer = get_random_float32_in_range(0, 0.7*te->interval);
-	te->duration = 1.0f;
+	te->duration = 2.0f;
 	te->progress = 0.0f;
 	te->counter = 0;
 
@@ -269,15 +269,34 @@ TimedEvent* initialize_effect_event(World* world, float duration) {
 //                          PARTICLE FUNCTIONS
 // -----------------------------------------------------------------------
 
-void create_light_source(Vector2 position, Vector4 color, float size, Scene_Cbuffer* scene_cbuffer) {
-	LightSource light;
-	light.position = v2_add(position, v2(window.width / 2, window.height / 2));
-	light.intensity = 0.2f;
-	light.radius = size;
-	light.color = color;
-	scene_cbuffer->lights[scene_cbuffer->light_count] = light;
-	scene_cbuffer->light_count++;
+void create_rectangular_light_source(Vector2 position, Vector4 color, Vector2 size, Vector2 direction, float intensity, Scene_Cbuffer* scene_cbuffer) {
+    LightSource light;
+
+	light.position = v2_add(position, v2(window.width / 2, window.height / 2)); // Adjust position
+    light.size = size;
+	light.direction = normalize(direction); // Ensure direction is normalized
+
+    light.color = color;
+	light.intensity = intensity;
+    scene_cbuffer->lights[scene_cbuffer->light_count] = light;
+    scene_cbuffer->light_count++;
 }
+
+void create_circular_light_source(Vector2 position, Vector4 color, float intensity, float radius, Scene_Cbuffer* scene_cbuffer) {
+    LightSource light;
+
+	light.position = v2_add(position, v2(window.width / 2, window.height / 2)); // Adjust position
+    light.size = v2(0, 0); // Set size to zero for point lights
+	light.radius = radius;   // Use size for point light radius
+	light.direction = v2(0, 0); // No direction needed for point lights
+
+    light.color = color;
+	light.intensity = intensity;
+    scene_cbuffer->lights[scene_cbuffer->light_count] = light;
+    scene_cbuffer->light_count++;
+}
+
+
 
 int number_of_certain_particle(ParticleKind kind) {
 	int n = 0;
@@ -533,7 +552,6 @@ int calculate_particles_to_spawn(float alpha, int number_of_existing_particles, 
     return (particles_to_spawn > 0) ? particles_to_spawn : 0;
 }
 
-
 // -----------------------------------------------------------------------
 //               SUMMON / SETUP / INITIALIZE FUNCTIONS
 // -----------------------------------------------------------------------
@@ -611,14 +629,22 @@ void summon_icicle(Entity* entity, Vector2 spawn_pos) {
 
 void summon_beam(Entity* entity, Vector2 spawn_pos) {
     entity->obstacle_type = OBSTACLE_BEAM;
-
-    TimedEvent* timed_event = initialize_beam_event(world);
-	entity->timer = timed_event;
-    entity->drop_interval = get_random_float32_in_range(3.0f, 5.0f);  // Tid mellan strålar
-    entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
+    entity->drop_interval = get_random_float32_in_range(3.0f, 5.0f);  // Time between beams
+    entity->drop_duration_time = 1.0f;  // Beam lasts for 1 second
     entity->drop_interval_timer = 0.0f;
 }
 
+void setup_beam(Entity* beam_obstacle, Entity* beam) {
+	TimedEvent* timed_event = initialize_beam_event(world);
+	beam->timer = timed_event;
+	beam->color = v4(1, 0, 0, 0.7);
+
+	float beam_height = beam_obstacle->size.y + window.height;
+	beam->size = v2(5, beam_height);
+	float beam_y_position = beam_obstacle->position.y - beam_height / 2 - beam_obstacle->size.y / 2;
+	beam->position = v2(beam_obstacle->position.x, beam_y_position);
+	beam->is_visible = false; // Initially invisible, until needed
+}
 
 void setup_effect(Effect* effect) {
 
@@ -679,8 +705,12 @@ void setup_boss_stage_20(Entity* entity) {
 	entity->size = v2(80, 25);
 	entity->start_size = entity->size;
 
-	entity->timer = initialize_boss_movement_event(world);
-	entity->second_timer = initialize_beam_event(world);
+	entity->timer = initialize_boss_movement_event(world); // Boss movement event
+
+	// Beam Functionality of the boss
+	Entity* beam = create_entity();
+	entity->child = beam;
+	entity->child->timer = initialize_beam_event(world); // Boss attack event
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
@@ -724,11 +754,13 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	} 
 	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
         entity->obstacle_type = OBSTACLE_BEAM;
-		TimedEvent* timed_event = initialize_beam_event(world);
-		entity->timer = timed_event;
         entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
         entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
         entity->drop_interval_timer = 0.0f;
+
+		Entity* beam = create_entity();
+		setup_beam(entity, beam);
+		entity->child = beam;
     }
 	else 
 	{
@@ -744,12 +776,12 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	obstacle_count++;
 }
 
-void setup_beam(Entity* beam_obstacle, Entity* beam) {
-	beam->color = v4(1, 0, 0, 0.7);
+void update_beam(Entity* beam_obstacle, Entity* beam) {
 	float beam_height = beam_obstacle->size.y + window.height;
-	beam->size = v2(5, beam_height);
-	float beam_y_position = beam_obstacle->position.y - beam_height / 2 - beam_obstacle->size.y / 2;
-	beam->position = v2(beam_obstacle->position.x, beam_y_position);
+    beam->size = v2(5, beam_height);
+
+    float beam_y_position = beam_obstacle->position.y - beam_height / 2 - beam_obstacle->size.y / 2;
+    beam->position = v2(beam_obstacle->position.x, beam_y_position);
 }
 
 void setup_effect_entity(Entity* entity, Entity* obstacle) {
@@ -1325,11 +1357,12 @@ Vector2 update_boss_stage_10_velocity(Vector2 velocity)
 
 void update_boss_stage_20(Entity* entity) 
 {
-    if (timer_finished(entity->second_timer)) {
-        // Kontrollera om beamen redan finns
-        Entity* p1 = create_entity(); // Skapa en ny beam
-        summon_beam(p1, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
-    }
+	if (entity->child != NULL) {
+		update_beam(entity, entity->child); // Moves the beam into the correct possition every frame
+		if (timer_finished(entity->child->timer)) {
+			summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
+		}
+	}
 }
 
 
@@ -1382,37 +1415,26 @@ void update_obstacle_beam(Entity* entity)
 // -----------------------------------------------------------------------
 
 void draw_beam(Entity* entity, Draw_Frame* frame) {
-	
-	if (timer_finished(entity->timer)) {
-		if (entity->child == NULL) {
-			Entity* beam = create_entity();
-			setup_beam(entity, beam);
-			entity->child = beam;
-		}
-		else
-		{
-			float duration_progress = entity->timer->duration_timer / entity->timer->duration;
-			entity->child->size.x = 0.5 * entity->size.x * sin(PI32*duration_progress);
-		}
-	} else {
-		if (entity->child != NULL) {
-			destroy_entity(entity->child);
-			entity->child = NULL;
-		}
-	}
-	   if (entity->child == NULL && entity->timer->interval_timer >= entity->timer->interval - 1.0f) {
+    if (entity->child != NULL) {
+        float max_beam_size = 5.0f;
+        float segment_separation = 20.0f;
 
-        float warning_progress = (entity->timer->interval - entity->timer->interval_timer) / 1.0f;
-        float warning_beam_size = (entity->size.x / 4.0f) * (1.0f - warning_progress);
+        float duration_progress = entity->child->timer->duration_timer / entity->child->timer->duration;
+        entity->child->size.x = max_beam_size;
+        entity->child->size.y = entity->position.y + window.height / 2;
 
-        Vector2 warning_position = v2_sub(entity->position, v2(warning_beam_size / 2, entity->size.y / 2));
-        Vector2 warning_beam_size_vec = v2(warning_beam_size, -window.height); 
-        draw_rect_in_frame(warning_position, warning_beam_size_vec, v4(0, 1, 0, 0.5), frame); 
-    }
-	if (entity->child != NULL) {
-		draw_centered_in_frame_rect(entity->child->position, entity->child->size, v4(1, 0, 0, 0.7), frame);
+        // Set position centered on the entity
+        entity->child->position = v2(entity->position.x, entity->position.y - (entity->size.y / 2) - (entity->child->size.y / 2));
+
+        if (timer_finished(entity->child->timer)) {
+            // Draw the real beam (red), centered on the entity
+            draw_centered_in_frame_rect(entity->child->position, entity->child->size, v4(1, 1, 1, 1), frame);
+        }
     }
 }
+
+
+
 
 void draw_playable_area_borders(Draw_Frame* frame) {
 	draw_line_in_frame(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, frame);
@@ -1542,9 +1564,10 @@ void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_stage_10_velocity(entity->velocity);
-		draw_beam(entity, frame);
-
     }    
+
+	draw_beam(entity, frame);
+
     // Draw the boss with the updated position and scaled size
 	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
     
@@ -2045,11 +2068,12 @@ void draw_game(Draw_Frame *frame) {
 			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
 		}
 
-		if (entity->entitytype == ENTITY_BOSS && current_stage_level == 10) {
-			draw_boss_stage_10(entity, frame);
-		}
-		if (entity->entitytype == ENTITY_BOSS && current_stage_level == 20) {
-			draw_boss_stage_20(entity, frame);
+		if (entity->entitytype == ENTITY_BOSS) {
+			switch(current_stage_level) {
+				case(10): draw_boss_stage_10(entity, frame); break;
+				case(20): draw_boss_stage_20(entity, frame); break;
+				default: break;
+			} break;
 		}
 	}
 
@@ -2198,11 +2222,10 @@ void update_game() {
 			} break;
 
 			case ENTITY_BOSS: {
-				if (current_stage_level == 10){
-					update_boss_stage_10(entity);
-				}
-				if (current_stage_level == 20){
-					update_boss_stage_20(entity);
+				switch(current_stage_level) {
+					case(10): update_boss_stage_10(entity); break;
+					case(20): update_boss_stage_20(entity); break;
+					default: break;
 				}
 			} break;
 
@@ -2234,12 +2257,12 @@ int entry(int argc, char **argv) {
 	Gfx_Shader_Extension postprocess_bloom_shader;
 
 	// regular shader + point light which makes things extra bright
-	light_shader = load_shader(STR("oogabooga/examples/bloom_light.hlsl"), sizeof(Scene_Cbuffer));
+	light_shader = load_shader(STR("include/bloom_light.hlsl"), sizeof(Scene_Cbuffer));
 	// shader used to generate bloom map. Very simple: It takes the output color -1 on all channels 
 	// so all we have left is how much bloom there should be
-	bloom_map_shader = load_shader(STR("oogabooga/examples/bloom_map.hlsl"), sizeof(Scene_Cbuffer));
+	bloom_map_shader = load_shader(STR("include/bloom_map.hlsl"), sizeof(Scene_Cbuffer));
 	// postprocess shader where the bloom happens. It samples from the generated bloom_map.
-	postprocess_bloom_shader = load_shader(STR("oogabooga/examples/bloom.hlsl"), sizeof(Scene_Cbuffer));
+	postprocess_bloom_shader = load_shader(STR("include/bloom.hlsl"), sizeof(Scene_Cbuffer));
 
 	Scene_Cbuffer scene_cbuffer;
 	
@@ -2394,28 +2417,37 @@ int entry(int argc, char **argv) {
 		scene_cbuffer.light_count = 0; // clean the list
 
 		if (use_shaders) {
+			create_rectangular_light_source(v2(0, -window.height / 2), v4(1.0, 0.0, 0.0, 1.0), v2(3*window.width, 50 + 5*(sin(now) + 3)), v2(1, 0), 1.0f, &scene_cbuffer);
+			create_rectangular_light_source(v2(0,  window.height / 2), v4(1.0, 0.0, 0.0, 1.0), v2(3*window.width, 50 + 5*(sin(now) + 3)), v2(1, 0), 1.0f, &scene_cbuffer);
+
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				Entity* entity = &world->entities[i];
 				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
 				if (!entity->is_valid) continue;
-				if (entity->entitytype == ENTITY_PROJECTILE || 
-				    entity->entitytype == ENTITY_EFFECT ||
-					entity->entitytype == ENTITY_OBSTACLE) {
-					create_light_source(entity->position, entity->color, 100.0f, &scene_cbuffer);
+
+				// Use rectangular lights for ENTITY_OBSTACLE
+				if (entity->entitytype == ENTITY_OBSTACLE) {
+					create_rectangular_light_source(entity->position, entity->color, v2(200.0f, 50.0f), v2(1, 0), 0.3f, &scene_cbuffer);
+				}
+				// Use circular lights for projectiles and effects
+				else if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT) {
+					create_circular_light_source(entity->position, entity->color, 0.3f, 10.0f, &scene_cbuffer);
 				}
 			}
 
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				Particle* p = &particles[i];
 				if (scene_cbuffer.light_count >= MAX_LIGHTS) break;
-				if (!(p->flags & PARTICLE_FLAGS_valid)) {
-					continue;
-				}
+				if (!(p->flags & PARTICLE_FLAGS_valid)) continue;
+
+				// Use point lights for certain particle effects
 				if (p->kind == PFX_EFFECT || p->kind == PFX_BOUNCE) {
-					create_light_source(p->pos, p->col, 10.0f, &scene_cbuffer);
+					create_circular_light_source(p->pos, p->col, 0.3f, 10.0f, &scene_cbuffer);
 				}
 			}
 		}
+
+
 		
 		// Reset draw frame & clear the image with a clear color
 		draw_frame_reset(&offscreen_draw_frame);

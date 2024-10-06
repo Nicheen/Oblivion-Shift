@@ -2,11 +2,14 @@
 // Structs (typedef struct)
 // -----------------------------------------------------------------------
 
+//#pragma pack(push, 16)
 typedef struct LightSource {
-	Vector2 position;
-	float intensity;
-	float radius;
-	Vector4 color;
+    Vector4 color;      // 16 bytes (4 floats)
+    Vector2 position;   // 8 bytes (2 floats) + 8 bytes padding = 16 bytes
+    Vector2 size;       // 8 bytes (2 floats) + 8 bytes padding = 16 bytes
+    Vector2 direction;  // 8 bytes (2 floats) + 8 bytes padding = 16 bytes
+    float intensity;    // 4 bytes
+    float radius;       // 4 bytes
 } LightSource;
 
 // BEWARE std140 packing:
@@ -46,6 +49,7 @@ typedef struct Entity {
 	int start_health;
 	int health;
 	bool is_valid;
+	bool is_visible;
 	// --- Entity Type Below ---
 	// Obstacle
 	enum ObstacleType obstacle_type;

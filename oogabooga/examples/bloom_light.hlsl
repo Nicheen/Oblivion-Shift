@@ -4,8 +4,10 @@
 struct LightSource {
     float2 position;
     float intensity;
-    float radius;
+    float radius; // Not used for rectangular light, kept for point lights
     float4 color;
+    float2 size; // X and Y dimensions for the rectangle
+    float2 direction; // Normalized vector for light rotation
 };
 
 #define MAX_LIGHTS 30

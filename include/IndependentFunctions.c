@@ -1,19 +1,32 @@
 #define m4_identity m4_make_scale(v3(1, 1, 1))
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
 
-Gfx_Shader_Extension load_shader(string file_path, int cbuffer_size) {
-	string source;
-	
-	bool ok = os_read_entire_file(file_path, &source, get_heap_allocator());
-	assert(ok, "Could not read %s", file_path);
-	
-	Gfx_Shader_Extension shader;
-	ok = gfx_compile_shader_extension(source
-	, cbuffer_size, &shader);
-	assert(ok, "Failed compiling shader extension");
-	
-	return shader;
+Vector2 normalize(Vector2 v) {
+    float length = sqrt(v.x * v.x + v.y * v.y);
+    if (length > 0) {
+        return (Vector2){ v.x / length, v.y / length };
+    }
+    return (Vector2){ 0.0f, 0.0f };  // Return a zero vector if length is zero
 }
+
+Gfx_Shader_Extension load_shader(string file_path, int cbuffer_size) {
+    string source;
+    
+    // Attempt to read the shader file
+    bool ok = os_read_entire_file(file_path, &source, get_heap_allocator());
+    assert(ok, "Could not read shader file: %s", file_path);
+    
+    Gfx_Shader_Extension shader;
+
+    // Compile the shader
+    ok = gfx_compile_shader_extension(source, cbuffer_size, &shader);
+    
+    // Enhanced error message with shader file context
+    assert(ok, "Failed compiling shader: %s", file_path);
+    
+    return shader;
+}
+
 
 Draw_Quad ndc_quad_to_screen_quad(Draw_Quad ndc_quad) {
 
