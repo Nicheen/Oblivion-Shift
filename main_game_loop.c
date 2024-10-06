@@ -1355,6 +1355,17 @@ Vector2 update_boss_stage_10_velocity(Vector2 velocity)
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
 
+Vector2 update_boss_stage_20_position(Vector2 current_position) 
+{
+    // Definiera teleportationsområden eller slumpa fram en ny position
+    float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);  // Slumpa x-position inom skärmens bredd
+    float new_y = get_random_float32_in_range(-(window.height/2) + 200, (window.height/2) - 100);     // Slumpa y-position inom övre halvan av skärmen
+
+    Vector2 new_position = v2(new_x, new_y);  // Skapa en ny position med slumpmässiga värden
+
+    return new_position;  // Returnera den nya positionen
+}
+
 void update_boss_stage_20(Entity* entity) 
 {
 	if (entity->child != NULL) {
@@ -1365,7 +1376,6 @@ void update_boss_stage_20(Entity* entity)
 	}
 }
 
-
 Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
     // Example of modifying the velocity based on a sine wave
@@ -1375,6 +1385,7 @@ Vector2 update_boss_stage_20_velocity(Vector2 velocity)
 
     return v2(new_velocity_x, new_velocity_y); // Return updated velocity
 }
+
 
 void update_wave_effect(Entity* entity) 
 {
