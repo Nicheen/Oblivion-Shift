@@ -1372,6 +1372,9 @@ void update_boss_stage_20(Entity* entity)
 		update_beam(entity, entity->child); // Moves the beam into the correct possition every frame
 		if (timer_finished(entity->child->timer)) {
 			summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
+			if (entity->child->timer->duration_timer <= delta_t){
+				entity->position = update_boss_stage_20_position(entity->position);
+			}
 		}
 	}
 }
