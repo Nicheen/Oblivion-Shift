@@ -2442,6 +2442,10 @@ int entry(int argc, char **argv) {
 				// Use rectangular lights for ENTITY_OBSTACLE
 				if (entity->entitytype == ENTITY_OBSTACLE) {
 					create_rectangular_light_source(entity->position, entity->color, v2(200.0f, 50.0f), v2(1, 0), 0.3f, &scene_cbuffer);
+
+					//Nice X effekt nedan (krashar spelet dock)
+					//create_rectangular_light_source(entity->position, entity->color, v2(100.0f, 25.0f), v2(0.5, -0.5), 0.3f, &scene_cbuffer);
+					//create_rectangular_light_source(entity->position, entity->color, v2(100.0f, 25.0f), v2(0.5, 0.5), 0.3f, &scene_cbuffer);
 				}
 				// Use circular lights for projectiles and effects
 				else if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT) {
