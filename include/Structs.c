@@ -36,6 +36,7 @@ typedef struct TimedEvent {
 typedef struct Entity {
     TimedEvent* timer;
 	TimedEvent* second_timer;
+	TimedEvent* third_timer;
 	struct Entity* child;
 	// --- Entity Attributes ---
 	enum EntityType entitytype;
@@ -51,6 +52,8 @@ typedef struct Entity {
 	bool is_valid;
 	bool is_visible;
 	// --- Entity Type Below ---
+	//Boss
+	bool first_stage_boss_stage_30;
 	// Obstacle
 	enum ObstacleType obstacle_type;
 	float wave_time;

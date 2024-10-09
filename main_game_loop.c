@@ -224,6 +224,21 @@ TimedEvent* initialize_boss_movement_event(World* world) {
     return te;
 }
 
+TimedEvent* initialize_boss_movement_event_stage_30(World* world) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_BOSS_MOVEMENT;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = 1.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
 TimedEvent* initialize_boss_attack_event_stage_10(World* world) {
 	TimedEvent* te = create_timedevent(world);
 
@@ -245,6 +260,36 @@ TimedEvent* initialize_boss_attack_event_20(World* world) {
     te->type = TIMED_EVENT_BOSS_ATTACK;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
     te->interval = 5.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_boss_attack_event_stage_30(World* world) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_BOSS_ATTACK;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = 1.0f; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_boss_second_stage_enent_stage_30(World* world) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_EFFECT;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = 30.0f; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -639,6 +684,17 @@ void summon_beam(Entity* entity, Vector2 spawn_pos) {
     entity->drop_interval_timer = 0.0f;
 }
 
+void summon_projectile_drop_boss_stage_30(Entity* entity, Vector2 spawn_pos) {
+	entity->entitytype = ENTITY_PROJECTILE;
+
+	entity->size = v2(10, 10);
+	entity->health = 1;
+	entity->max_bounces = 100;
+	entity->position = spawn_pos;
+	entity->color = v4(1, 0, 0, 0.5);
+	entity->velocity = v2(0, -75);
+}
+
 void setup_beam(Entity* beam_obstacle, Entity* beam) {
 	TimedEvent* timed_event = initialize_beam_event(world);
 	beam->timer = timed_event;
@@ -716,6 +772,21 @@ void setup_boss_stage_20(Entity* entity) {
 	Entity* beam = create_entity();
 	entity->child = beam;
 	entity->child->timer = initialize_beam_event(world); // Boss attack event
+}
+
+void setup_boss_stage_30(Entity* entity) {
+	entity->entitytype = ENTITY_BOSS;
+
+	entity->first_stage_boss_stage_30 = true;
+	entity->health = 10;
+	entity->start_health = entity->health;
+	entity->color = rgba(20, 50, 243, 255);
+	entity->size = v2(50, 50);
+	entity->start_size = entity->size;
+	entity->position = v2(entity->position.x , 200);
+	entity->timer = initialize_boss_movement_event_stage_30(world);
+	entity->second_timer = initialize_boss_attack_event_stage_30(world);
+	entity->third_timer = initialize_boss_second_stage_enent_stage_30(world);
 }
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
@@ -1376,17 +1447,71 @@ Vector2 update_boss_stage_20_position(Vector2 current_position)
 }
 
 void update_boss_stage_20(Entity* entity) 
+{	
+    static bool beam_has_fired = false;
+    static float teleport_timer = 0.0f; // Timer to track teleportation delay (in seconds)
+
+    if (entity->child != NULL) {
+        update_beam(entity, entity->child); // Moves the beam into the correct position every frame
+
+        if (timer_finished(entity->child->timer)) {
+            summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0))); // Create the beam at the correct position
+            beam_has_fired = true;
+            teleport_timer = 1.0f; // Start the teleport delay (1 second)
+        }
+
+        // If beam has fired, start the teleportation countdown
+        if (beam_has_fired) {
+            teleport_timer -= delta_t; // Decrease the timer by the frame's time
+
+            // Once the timer reaches 0 or less, teleport the boss
+            if (teleport_timer <= 0.0f) {
+                entity->position = update_boss_stage_20_position(entity->position); // Teleport the boss
+                beam_has_fired = false;  // Reset the beam fired status
+            }
+        }
+    }
+}
+
+
+void update_boss_stage_30(Entity* entity) 
 {
-	if (entity->child != NULL) {
-		update_beam(entity, entity->child); // Moves the beam into the correct possition every frame
-		if (timer_finished(entity->child->timer)) {
-			summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0))); // Skapa beam på rätt position
-			if (entity->child->timer->duration_timer <= delta_t){
-				entity->position = update_boss_stage_20_position(entity->position);
-			}
-		}
+	if (timer_finished(entity->second_timer)) {
+		Entity* p1 = create_entity();
+		summon_projectile_drop_boss_stage_30(p1, v2_add(entity->position, v2(0, -entity->size.y)));
+	}
+	if (timer_finished(entity->third_timer)) {
+		entity->first_stage_boss_stage_30 = false;
 	}
 }
+
+
+Vector2 update_boss_stage_30_position(Vector2 current_position) {
+	float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);
+	Vector2 new_position = v2(new_x, 200); 
+
+    return new_position;
+}
+
+Vector2 update_boss_stage_30_velocity(Vector2 velocity, Entity* entity) {
+    // Variabler för rörelse baserat på sinus
+    float velocity_amplitude = 0.0f;
+    float new_velocity_x = 0.0f;
+
+    // Kolla vilken fas bossen är i
+    if (entity->first_stage_boss_stage_30) {
+        // Om bossen är i den första fasen
+        velocity_amplitude = get_random_float32_in_range(70.0f, 100.0f); // Amplitud för hastighetsändringar
+        new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); // Modifiera x-hastighet
+		
+    } else if (!entity->first_stage_boss_stage_30) {
+        // Om bossen är i den andra fasen, teleportera och returnera noll hastighet
+		entity->position = update_boss_stage_30_position(entity->position); // Anropa en funktion för att teleportera
+        return v2(0, 0); // Ingen rörelse
+    }
+	return v2(new_velocity_x, 0);
+}
+
 
 Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
@@ -1586,7 +1711,7 @@ void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
 void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
-        entity->velocity = update_boss_stage_10_velocity(entity->velocity);
+        entity->velocity = update_boss_stage_20_velocity(entity->velocity);
     }    
 
 	draw_beam(entity, frame);
@@ -1604,6 +1729,19 @@ void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
     position_kube.y -= 7;  
 	draw_centered_in_frame_rect(position_kube, v2(18, 18), entity->color, frame);
 }	
+
+void draw_boss_stage_30(Entity* entity, Draw_Frame* frame) {
+    // Update the velocity based on the timer
+    if (timer_finished(entity->timer)) {
+		if (entity->first_stage_boss_stage_30){
+        	entity->velocity = update_boss_stage_30_velocity(entity->velocity, entity);
+		}
+		if (!entity->first_stage_boss_stage_30) {
+			entity->position = update_boss_stage_30_position(entity->position);
+		}
+	}
+    draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
+}
 
 void draw_boss_health_bar(Draw_Frame* frame) {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -1937,16 +2075,24 @@ void stage_20_boss() {
 }
 
 void stage_21_to_29() {
-	float r = 0.5f;
+	float r = 0.1f;
 	float g = 0.2f;
-	float b = 0.0f;  // Mörk orange/brun för lavabakgrund
+	float b = 0.5f;  // Mörk orange/brun för lavabakgrund
 	world->world_background = v4(r, g, b, 1.0f); // Background color for lava
 
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
-	// Emit aska (ash) partiklar
-	int n_ash_particles = number_of_certain_particle(PFX_ASH);
-	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 500 * ((float)current_stage_level / (float)10) - n_ash_particles, PFX_ASH);
+	int n_wind_particles = number_of_certain_particle(PFX_WIND);
+	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 500 * ((float)current_stage_level / (float)10) - n_wind_particles, PFX_WIND);
+}
+
+void stage_30_boss() {
+    Entity* boss = create_entity();
+    setup_boss_stage_30(boss);
+
+    int n_existing_particles = number_of_certain_particle(PFX_WIND);
+	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 100.0f);
+    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_WIND);
 }
 
 void stage_31_to_39() {
@@ -2013,6 +2159,18 @@ void initialize_new_stage(World* world, int current_stage_level) {
 	{
 		stage_20_boss();
 	}
+	else if (current_stage_level <= 29) 
+	{
+		stage_21_to_29();
+	} 
+	else if (current_stage_level == 30) 
+	{
+		stage_30_boss();
+	}
+	else if (current_stage_level <= 39) 
+	{
+		stage_31_to_39();
+	} 
 	else 
 	{
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
@@ -2095,6 +2253,7 @@ void draw_game(Draw_Frame *frame) {
 			switch(current_stage_level) {
 				case(10): draw_boss_stage_10(entity, frame); break;
 				case(20): draw_boss_stage_20(entity, frame); break;
+				case(30): draw_boss_stage_30(entity, frame); break;
 				default: break;
 			} break;
 		}
@@ -2248,6 +2407,7 @@ void update_game() {
 				switch(current_stage_level) {
 					case(10): update_boss_stage_10(entity); break;
 					case(20): update_boss_stage_20(entity); break;
+					case(30): update_boss_stage_30(entity); break;
 					default: break;
 				}
 			} break;
