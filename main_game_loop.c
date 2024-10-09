@@ -2423,49 +2423,73 @@ int entry(int argc, char **argv) {
 				}
 			}
 
-			// Handle left mouse button press (firing the projectile)
-			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
-				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
-
-				// Create a new projectile and set its properties
-				Entity* projectile = create_entity();
-				summon_projectile_player(projectile, player);
-
-				// Adjust damage based on charge time
-				int charge_based_damage = 1;  // Default damage is 1
-				if (enhanced_projectile_damage) {
-					// If damage enhancement is active
-					if (charge_time_projectile >= 3.0f) {
-						charge_based_damage = 3;  // 3 damage if charged for 3 or more seconds
-					} else if (charge_time_projectile >= 1.0f) {
-						charge_based_damage = 2;  // 2 damage if charged for 1 or more seconds
-					}
-				} else {
-					// If speed enhancement is active, set damage to default (1)
-					charge_based_damage = 1;  // Always 1 damage if speed enhancement is active
-				}
-
-				projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
-
-				// Set projectile speed
-				projectile_speed = 500.0f; // Default speed
-				if (enhanced_projectile_speed) {
-					if (charge_time_projectile >= 2.0f) {
-						projectile_speed *= 2.0f;
-					}
-				}
-				// Assuming your projectile has a velocity field, set the speed
-				projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
-
-				charge_time_projectile = 0;  // Reset charge time after firing
+			if (player->entity->is_valid && !game_over && !is_game_paused) {
 				
-				number_of_shots_fired++;
+				static bool has_played_sound_1 = false;
+				static bool has_played_sound_2 = false;
+
+				if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
+						play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"));
+						has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+					}
+
+				if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
+						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"));
+						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+					}
+
+				if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
+						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"));
+						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+					}
+				
+				if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
+					consume_key_just_pressed(MOUSE_BUTTON_LEFT);
+
+					// Create a new projectile and set its properties
+					Entity* projectile = create_entity();
+					summon_projectile_player(projectile, player);
+
+					// Adjust damage based on charge time
+					int charge_based_damage = 1;  // Default damage is 1
+					if (enhanced_projectile_damage) {
+						// If damage enhancement is active
+						if (charge_time_projectile >= 3.0f) {
+							charge_based_damage = 3;  // 3 damage if charged for 3 or more seconds
+						} else if (charge_time_projectile >= 1.0f) {
+							charge_based_damage = 2;  // 2 damage if charged for 1 or more seconds
+						}
+					} else {
+						// If speed enhancement is active, set damage to default (1)
+						charge_based_damage = 1;  // Always 1 damage if speed enhancement is active
+					}
+					
+
+					projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
+
+					// Set projectile speed
+					projectile_speed = 500.0f; // Default speed
+					if (enhanced_projectile_speed) {
+						if (charge_time_projectile >= 2.0f) {
+							projectile_speed *= 2.0f;
+						}
+					}
+					// Assuming your projectile has a velocity field, set the speed
+					projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
+					
+					charge_time_projectile = 0;  // Reset charge time after firing
+					
+					number_of_shots_fired++;
+				}
+
+				if (charge_time_projectile == 0) {
+						has_played_sound_1 = false; // Återställ flaggan när projektilen laddas om
+						has_played_sound_2 = false;
+					}
+				// Update player position as usual
+				update_player_position(player);
 			}
-
-			// Update player position as usual
-			update_player_position(player);
 		}
-
 
 
 
