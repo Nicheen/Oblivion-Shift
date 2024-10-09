@@ -33,6 +33,10 @@ LightSource lights[MAX_LIGHTS];
 float stage_times[100];
 float stage_timer;
 
+float charge_time_projectile;
+bool enhanced_projectile_damage = true;
+bool enhanced_projectile_speed = false;
+
 Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
 Gfx_Image* heart_sprite = NULL;
@@ -601,6 +605,7 @@ void summon_projectile_player(Entity* entity, Player* player) {
 	entity->max_bounces = 100;
 	entity->position = v2_add(player->entity->position, v2(0, setup_y_offset));
 	entity->color = v4(0, 1, 0, 1); // Green color
+	entity->damage = 1;
 	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->entity->position.x, player->entity->position.y + setup_y_offset)));
 	entity->velocity = v2_mulf(normalized_velocity, projectile_speed);
 }
@@ -1201,7 +1206,7 @@ bool rect_rect_collision(Entity* rect1, Entity* rect2) {
 
 void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 
-    int damage = 1.0f; // This can be changes in the future
+    int damage = projectile->damage; 
 	
 	if (obstacle->obstacle_type == OBSTACLE_BLOCK) 
 	{
@@ -1242,70 +1247,74 @@ void update_player(Player* player) {
 }
 
 void update_player_position(Player* player) {
-    Vector2 input_axis = v2(0, 0);  // Skapar en tom 2D-vektor för inmatning
+    Vector2 input_axis = v2(0, 0);  // Initialize input axis
     bool moving = false;
-    static int previous_input = -1;  // -1: ingen riktning, 0: vänster, 1: höger
+    static int previous_input = -1;  // Direction tracking
 
-    // Kontrollera om vänster knapp trycks ned
+    // Check for left movement (A key or left arrow)
     if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
         input_axis.x -= 1.0f;
         moving = true;
 
-        // Om tidigare input var höger, decelerera först innan vi byter riktning
+        // Decelerate if switching direction
         if (previous_input == 1 && player->entity->velocity.x > 0) {
             player->entity->velocity.x -= player->entity->deceleration.x * delta_t;
-            if (player->entity->velocity.x < 0) player->entity->velocity.x = 0;  // Förhindra negativ hastighet under inbromsning
-            return;  // Vänta tills vi bromsat in helt
+            if (player->entity->velocity.x < 0) player->entity->velocity.x = 0;
+            return;
         }
-        previous_input = 0;  // Uppdatera riktningen till vänster
+        previous_input = 0;  // Update direction to left
     }
 
-    // Kontrollera om höger knapp trycks ned
+    // Check for right movement (D key or right arrow)
     if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
         input_axis.x += 1.0f;
         moving = true;
 
-        // Om tidigare input var vänster, decelerera först innan vi byter riktning
+        // Decelerate if switching direction
         if (previous_input == 0 && player->entity->velocity.x < 0) {
             player->entity->velocity.x += player->entity->deceleration.x * delta_t;
-            if (player->entity->velocity.x > 0) player->entity->velocity.x = 0;  // Förhindra positiv hastighet under inbromsning
-            return;  // Vänta tills vi bromsat in helt
+            if (player->entity->velocity.x > 0) player->entity->velocity.x = 0;
+            return;
         }
-        previous_input = 1;  // Uppdatera riktningen till höger
+        previous_input = 1;  // Update direction to right
     }
 
-    // Om både vänster och höger trycks ned samtidigt
+    // If both keys are pressed, stop moving
     if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && (is_key_down('D') || is_key_down(KEY_ARROW_RIGHT))) {
-        input_axis.x = 0;  // Om båda trycks, sluta röra dig
+        input_axis.x = 0;
         moving = false;
-        previous_input = -1;  // Ingen aktiv rörelse
+        previous_input = -1;  // No active movement
     }
 
-    // Normalisera input_axis för att säkerställa korrekt riktning
+    // Normalize input_axis for proper direction
     input_axis = v2_normalize(input_axis);
+
+    // Calculate speed modifier based on mouse button state
+    float speed_multiplier = (is_key_down(MOUSE_BUTTON_RIGHT)) ? 0.5f : 1.0f;  // Move at half speed if left mouse is held down
 
     // Acceleration
     if (moving) {
-        // Om vi rör oss, accelerera
-        player->entity->velocity = v2_add(player->entity->velocity, v2_mulf(input_axis, player->entity->acceleration.x * delta_t));
+        // Accelerate based on input
+        player->entity->velocity = v2_add(player->entity->velocity, v2_mulf(input_axis, player->entity->acceleration.x * delta_t * speed_multiplier));
 
-        // Begränsa hastigheten till maxhastigheten
-        if (v2_length(player->entity->velocity) > player->max_speed) {
-            player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed);
+        // Cap velocity at max speed
+        if (v2_length(player->entity->velocity) > player->max_speed * speed_multiplier) {
+            player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed * speed_multiplier);
         }
     } else {
-        // Deceleration om ingen knapp trycks ned
+        // Deceleration if no keys are pressed
         if (v2_length(player->entity->velocity) > player->min_speed) {
             Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
             player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
 
-            // Om hastigheten närmar sig 0, stoppa helt
+            // Stop if near zero speed
             if (v2_length(player->entity->velocity) < player->min_speed) {
                 player->entity->velocity = v2(0, 0);
             }
         }
     }
 }
+
 
 void limit_player_position(Player* player){
     // Begränsa spelarens position inom spelområdet
@@ -2396,30 +2405,70 @@ int entry(int argc, char **argv) {
 			}
 		}
 	
-		if (player->entity->is_valid && !game_over && !is_game_paused)
-		{
-			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) 
-			{
+		if (player->entity->is_valid && !game_over && !is_game_paused) {
+			// Track charging time while the right mouse button is held down
+			if (is_key_down(MOUSE_BUTTON_RIGHT)) {
+				charge_time_projectile += delta_t;  // Increase charge time
+			}
+
+			// Toggle between enhanced damage and enhanced speed with 'E'
+			if (is_key_just_pressed('E')) {
+				// Toggle the abilities
+				if (enhanced_projectile_damage) {
+					enhanced_projectile_damage = false;
+					enhanced_projectile_speed = true;  // Enable speed enhancement
+				} else {
+					enhanced_projectile_damage = true;
+					enhanced_projectile_speed = false;  // Enable damage enhancement
+				}
+			}
+
+			// Handle left mouse button press (firing the projectile)
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
 				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
+				// Create a new projectile and set its properties
 				Entity* projectile = create_entity();
 				summon_projectile_player(projectile, player);
 
+				// Adjust damage based on charge time
+				int charge_based_damage = 1;  // Default damage is 1
+				if (enhanced_projectile_damage) {
+					// If damage enhancement is active
+					if (charge_time_projectile >= 3.0f) {
+						charge_based_damage = 3;  // 3 damage if charged for 3 or more seconds
+					} else if (charge_time_projectile >= 1.0f) {
+						charge_based_damage = 2;  // 2 damage if charged for 1 or more seconds
+					}
+				} else {
+					// If speed enhancement is active, set damage to default (1)
+					charge_based_damage = 1;  // Always 1 damage if speed enhancement is active
+				}
+
+				projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
+
+				// Set projectile speed
+				projectile_speed = 500.0f; // Default speed
+				if (enhanced_projectile_speed) {
+					if (charge_time_projectile >= 2.0f) {
+						projectile_speed *= 2.0f;
+					}
+				}
+				// Assuming your projectile has a velocity field, set the speed
+				projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
+
+				charge_time_projectile = 0;  // Reset charge time after firing
+				
 				number_of_shots_fired++;
 			}
 
-			else if (is_key_just_pressed(KEY_SPACEBAR)) 
-			{
-				consume_key_just_pressed(KEY_SPACEBAR);
-
-				Entity* projectile = create_entity();
-				summon_projectile_player(projectile, player);
-
-				number_of_shots_fired++;
-			}
-
+			// Update player position as usual
 			update_player_position(player);
 		}
+
+
+
+
 
 		update_game();
 

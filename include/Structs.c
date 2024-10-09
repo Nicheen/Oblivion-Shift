@@ -62,6 +62,7 @@ typedef struct Entity {
 	// Projectile
 	int n_bounces;
 	int max_bounces;
+	int damage;
 } Entity;
 
 typedef struct Effect{
@@ -79,7 +80,10 @@ typedef struct Player{
 	float max_bounce;
 	float damp_bounce;
 	float immunity_timer;
+	float speed_multiplier;
     bool is_immune;
+	bool enhanced_projectile_damage;
+	bool enhanced_projectile_speed;
 } Player;
 
 typedef struct ObstacleTuple {
