@@ -1229,6 +1229,39 @@ void handle_beam_collision(Entity* beam, Player* player) {
     player->immunity_timer = 1.0f;
 }
 
+void handle_player_attack(Entity* projectile) {
+	// Adjust damage based on charge time
+	int charge_based_damage = 1;  // Default damage is 1
+	if (enhanced_projectile_damage) {
+		// If damage enhancement is active
+		if (charge_time_projectile >= 3.0f) {
+			charge_based_damage = 3;  // 3 damage if charged for 3 or more seconds
+		} else if (charge_time_projectile >= 1.0f) {
+			charge_based_damage = 2;  // 2 damage if charged for 1 or more seconds
+		}
+	} else {
+		// If speed enhancement is active, set damage to default (1)
+		charge_based_damage = 1;  // Always 1 damage if speed enhancement is active
+	}
+	
+	projectile->size = v2_mulf(v2(charge_based_damage, charge_based_damage), 5);
+	projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
+
+	// Set projectile speed
+	projectile_speed = 500.0f; // Default speed
+	if (enhanced_projectile_speed) {
+		if (charge_time_projectile >= 2.0f) {
+			projectile_speed *= 2.0f;
+		}
+	}
+	// Assuming your projectile has a velocity field, set the speed
+	projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
+	
+	charge_time_projectile = 0;  // Reset charge time after firing
+	
+	number_of_shots_fired++;
+}
+
 // -----------------------------------------------------------------------
 //                         PLAYER FUNCTIONS
 // -----------------------------------------------------------------------
@@ -2450,42 +2483,13 @@ int entry(int argc, char **argv) {
 					Entity* projectile = create_entity();
 					summon_projectile_player(projectile, player);
 
-					// Adjust damage based on charge time
-					int charge_based_damage = 1;  // Default damage is 1
-					if (enhanced_projectile_damage) {
-						// If damage enhancement is active
-						if (charge_time_projectile >= 3.0f) {
-							charge_based_damage = 3;  // 3 damage if charged for 3 or more seconds
-						} else if (charge_time_projectile >= 1.0f) {
-							charge_based_damage = 2;  // 2 damage if charged for 1 or more seconds
-						}
-					} else {
-						// If speed enhancement is active, set damage to default (1)
-						charge_based_damage = 1;  // Always 1 damage if speed enhancement is active
-					}
-					
-
-					projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
-
-					// Set projectile speed
-					projectile_speed = 500.0f; // Default speed
-					if (enhanced_projectile_speed) {
-						if (charge_time_projectile >= 2.0f) {
-							projectile_speed *= 2.0f;
-						}
-					}
-					// Assuming your projectile has a velocity field, set the speed
-					projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
-					
-					charge_time_projectile = 0;  // Reset charge time after firing
-					
-					number_of_shots_fired++;
+					handle_player_attack(projectile);
 				}
 
 				if (charge_time_projectile == 0) {
-						has_played_sound_1 = false; // Återställ flaggan när projektilen laddas om
-						has_played_sound_2 = false;
-					}
+					has_played_sound_1 = false; // Återställ flaggan när projektilen laddas om
+					has_played_sound_2 = false;
+				}
 				// Update player position as usual
 				update_player_position(player);
 			}
