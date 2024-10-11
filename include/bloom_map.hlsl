@@ -7,7 +7,7 @@ struct LightSource {
     float radius;      // 4 bytes
 };
 
-#define MAX_LIGHTS 30
+#define MAX_LIGHTS 40
 
 cbuffer some_cbuffer : register(b0) {
     float2 mouse_pos_screen; // In pixels

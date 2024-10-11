@@ -36,6 +36,7 @@ float stage_timer;
 float charge_time_projectile;
 bool enhanced_projectile_damage = true;
 bool enhanced_projectile_speed = false;
+Vector4 barrier_color;
 
 Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
@@ -318,12 +319,13 @@ TimedEvent* initialize_effect_event(World* world, float duration) {
 //                          PARTICLE FUNCTIONS
 // -----------------------------------------------------------------------
 
-void create_rectangular_light_source(Vector2 position, Vector4 color, Vector2 size, Vector2 direction, float intensity, Scene_Cbuffer* scene_cbuffer) {
+void create_rectangular_light_source(Vector2 position, Vector4 color, Vector2 size, float radius, Vector2 direction, float intensity, Scene_Cbuffer* scene_cbuffer) {
     LightSource light;
 
 	light.position = v2_add(position, v2(window.width / 2, window.height / 2)); // Adjust position
     light.size = size;
 	light.direction = normalize(direction); // Ensure direction is normalized
+	light.radius = radius;
 
     light.color = color;
 	light.intensity = intensity;
@@ -1209,7 +1211,7 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset) {
     draw_text(font_light, 
         temp, 
         font_height, 
-        v2(-window.width / 2, window.height / 2 - 200 - *y_offset),  // Adjust y-position based on y_offset
+        v2(-window.width / 2, window.height / 2 - 225 - *y_offset),  // Adjust y-position based on y_offset
         v2(0.4, 0.4), 
         COLOR_GREEN
     );
@@ -1598,24 +1600,22 @@ void update_obstacle_beam(Entity* entity)
 void draw_beam(Entity* entity, Draw_Frame* frame) {
     if (entity->child != NULL) {
         float max_beam_size = 5.0f;
-        float segment_separation = 20.0f;
 
-        float duration_progress = entity->child->timer->duration_timer / entity->child->timer->duration;
-        entity->child->size.x = max_beam_size;
-        entity->child->size.y = entity->position.y + window.height / 2;
-
-        // Set position centered on the entity
-        entity->child->position = v2(entity->position.x, entity->position.y - (entity->size.y / 2) - (entity->child->size.y / 2));
+		entity->child->is_visible = false;
 
         if (timer_finished(entity->child->timer)) {
+			entity->child->is_visible = true;
+
             // Draw the real beam (red), centered on the entity
-            draw_centered_in_frame_rect(entity->child->position, entity->child->size, v4(1, 1, 1, 1), frame);
+			float beam_shoot_alpha = powf(min(entity->child->timer->duration_timer, 1.0f), 3);
+
+			entity->child->size = v2_mul(v2(max_beam_size, entity->position.y + window.height / 2), v2(1, beam_shoot_alpha));
+			entity->child->position = v2_sub(entity->position, v2(entity->child->size.x / 2, entity->child->size.y + entity->size.y / 2));
+			
+            draw_rect_in_frame(entity->child->position, entity->child->size, COLOR_WHITE, frame);
         }
     }
 }
-
-
-
 
 void draw_playable_area_borders(Draw_Frame* frame) {
 	draw_line_in_frame(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, frame);
@@ -1649,8 +1649,9 @@ void draw_death_borders(TimedEvent* timedevent, Draw_Frame* frame) {
 
 	float wave = 5*(sin(os_get_elapsed_seconds()) + 3);	
 	
-	draw_line_in_frame(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, color, frame);
-	draw_line_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, color, frame);
+	barrier_color = color;
+	draw_line_in_frame(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, barrier_color, frame);
+	draw_line_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, barrier_color, frame);
 
 }
 
@@ -2535,7 +2536,7 @@ int entry(int argc, char **argv) {
 		
 		delta_t = now - last_time;
 		last_time = now;
-		if (is_game_running) stage_timer += delta_t;
+		if (is_game_running && !is_game_paused) stage_timer += delta_t;
 
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
@@ -2668,8 +2669,11 @@ int entry(int argc, char **argv) {
 		scene_cbuffer.light_count = 0; // clean the list
 
 		if (use_shaders) {
-			create_rectangular_light_source(v2(0, -window.height / 2), v4(1.0, 0.0, 0.0, 1.0), v2(3*window.width, 50 + 5*(sin(now) + 3)), v2(1, 0), 1.0f, &scene_cbuffer);
-			create_rectangular_light_source(v2(0,  window.height / 2), v4(1.0, 0.0, 0.0, 1.0), v2(3*window.width, 50 + 5*(sin(now) + 3)), v2(1, 0), 1.0f, &scene_cbuffer);
+			create_rectangular_light_source(v2(0, -window.height / 2), barrier_color, v2(window.width, 40 + 10*(sin(now) + 3)), 0, v2(1, 0), 0.5f, &scene_cbuffer);
+			create_rectangular_light_source(v2(0,  window.height / 2), barrier_color, v2(window.width, 40 + 10*(sin(now) + 3)), 0, v2(1, 0), 0.5f, &scene_cbuffer);
+			
+			create_rectangular_light_source(v2(-PLAYABLE_WIDTH / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
+			create_rectangular_light_source(v2( PLAYABLE_WIDTH / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
 
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				Entity* entity = &world->entities[i];
@@ -2678,15 +2682,27 @@ int entry(int argc, char **argv) {
 
 				// Use rectangular lights for ENTITY_OBSTACLE
 				if (entity->entitytype == ENTITY_OBSTACLE) {
-					create_rectangular_light_source(entity->position, entity->color, v2(200.0f, 50.0f), v2(1, 0), 0.3f, &scene_cbuffer);
+					create_circular_light_source(entity->position, entity->color, 0.3f, entity->size.x * 2, &scene_cbuffer);
 
+					if (entity->obstacle_type == OBSTACLE_BEAM) {
+						if (entity->child->is_visible) {
+							create_rectangular_light_source(v2_add(entity->child->position, v2_mulf(entity->child->size, 0.5)), COLOR_RED, v2(entity->child->size.y, entity->child->size.x * 5.0f), 0, v2(0, 1), 1.0f, &scene_cbuffer);
+						}
+					}
 					//Nice X effekt nedan (krashar spelet dock)
 					//create_rectangular_light_source(entity->position, entity->color, v2(100.0f, 25.0f), v2(0.5, -0.5), 0.3f, &scene_cbuffer);
 					//create_rectangular_light_source(entity->position, entity->color, v2(100.0f, 25.0f), v2(0.5, 0.5), 0.3f, &scene_cbuffer);
 				}
 				// Use circular lights for projectiles and effects
 				else if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT) {
-					create_circular_light_source(entity->position, entity->color, 0.3f, 10.0f, &scene_cbuffer);
+					create_circular_light_source(entity->position, entity->color, 0.3f, entity->size.x * 1.5f, &scene_cbuffer);
+				}
+				else if (entity->entitytype == ENTITY_BOSS) {
+					if (entity->child != NULL) {
+						if (entity->child->is_visible) {
+							create_rectangular_light_source(v2_add(entity->child->position, v2_mulf(entity->child->size, 0.5)), COLOR_RED, v2(entity->child->size.y, entity->child->size.x * 5.0f), 0, v2(0, 1), 1.0f, &scene_cbuffer);
+						}
+					}
 				}
 			}
 
@@ -2765,6 +2781,7 @@ int entry(int argc, char **argv) {
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("light sources: %i"), scene_cbuffer.light_count), font_height, v2(-window.width / 2, window.height / 2 - 200), v2(0.4, 0.4), COLOR_GREEN);
 			draw_timed_events();
 		}
 

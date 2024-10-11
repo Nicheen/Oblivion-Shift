@@ -7,7 +7,7 @@ struct LightSource {
     float radius;      // 4 bytes
 };
 
-#define MAX_LIGHTS 30
+#define MAX_LIGHTS 40
 
 cbuffer some_cbuffer : register(b0) {
     float2 mouse_pos_screen; // In pixels
@@ -45,7 +45,15 @@ float4 get_light_contribution(PS_INPUT input) {
             // Check if within the rectangle bounds
             if (abs(rotated_pos.x) <= light.size.x * 0.5 && abs(rotated_pos.y) <= light.size.y * 0.5) {
                 // Instead of using the distance, use the individual x and y components for attenuation
-                float attenuation_x = saturate(1.0 - (abs(rotated_pos.x) / (light.size.x * 0.5)));
+                float attenuation_x;
+
+                // Uniform light falloff along x-axis if radius is 0
+                if (light.radius == 0) {
+                    attenuation_x = 1.0; // No falloff on x-axis
+                } else {
+                    // Taper off x-axis based on radius
+                    attenuation_x = saturate(1.0 - (abs(rotated_pos.x) / light.radius));
+                }
                 float attenuation_y = saturate(1.0 - (abs(rotated_pos.y) / (light.size.y * 0.5)));
                 float attenuation = attenuation_x * attenuation_y * light.intensity;
 
