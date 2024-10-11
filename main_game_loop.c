@@ -420,10 +420,22 @@ int particle_render(Draw_Frame* frame) {
 		Vector2 window_size = v2(window.width, window.height);
 		if (is_position_outside_walls_and_bottom(p->pos, window_size)) {
 			if (p->immortal) 
-			{
-				p->velocity = v2(get_random_float32_in_range(-10, 10), p->identifier*-20);
-				p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3*window.height));
-			}
+				{	
+					if (PFX_WIND) 
+					{
+						if (p->pos.x < -window.width / 2) 
+						{
+							p->pos = v2(window.width / 2, get_random_float32_in_range(-window.height / 2, window.height / 2));
+							p->velocity = v2(get_random_float32_in_range(-30, -10), get_random_float32_in_range(-5, 5));
+						}
+					}
+					else 
+					{
+						p->velocity = v2(get_random_float32_in_range(-10, 10), p->identifier * -20);
+						p->pos = v2(get_random_float32_in_range(-window.width / 2, window.width / 2), get_random_float32_in_range(window.height / 2, 3 * window.height));
+					}
+				}
+
 			else
 			{
 				particle_clear(p);
@@ -2158,7 +2170,7 @@ void stage_21_to_29() {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	int n_wind_particles = number_of_certain_particle(PFX_WIND);
-	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 500 * ((float)current_stage_level / (float)10) - n_wind_particles, PFX_WIND);
+	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 100 * ((float)current_stage_level / (float)10) - n_wind_particles, PFX_WIND);
 }
 
 void stage_30_boss() {
