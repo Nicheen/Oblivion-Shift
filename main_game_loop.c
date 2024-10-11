@@ -1356,6 +1356,20 @@ void update_player_position(Player* player) {
     Vector2 input_axis = v2(0, 0);  // Initialize input axis
     bool moving = false;
     static int previous_input = -1;  // Direction tracking
+    static bool can_dash = true;     // Track if the player can dash
+    static float dash_cooldown = 0.5f; // Cooldown time in seconds
+    static float dash_timer = 0.5f;   // Timer to track cooldown
+    static bool shift_released = true; // Track if shift has been released
+    float dash_distance = 50.0f;    // Distance to teleport when dashing
+
+    // Update dash cooldown timer
+    if (!can_dash) {
+        dash_timer += delta_t;
+        if (dash_timer >= dash_cooldown) {
+            can_dash = true;  // Reset dash availability
+            dash_timer = 0.0f;
+        }
+    }
 
     // Check for left movement (A key or left arrow)
     if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
@@ -1392,11 +1406,35 @@ void update_player_position(Player* player) {
         previous_input = -1;  // No active movement
     }
 
+    // Check if shift has been released
+    if (!is_key_down(KEY_SHIFT)) {
+        shift_released = true;  // Reset shift_released when shift is not pressed
+    }
+
+    // Dash (teleport) when shift is pressed AND shift was previously released
+    if (is_key_down(KEY_SHIFT) && shift_released && can_dash && (is_key_down('A') || is_key_down('D'))) {
+        if (previous_input == 0) {
+            // Dashing to the left
+            player->entity->position.x -= dash_distance;
+            if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
+                player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;  // Prevent out of bounds
+            }
+        } else if (previous_input == 1) {
+            // Dashing to the right
+            player->entity->position.x += dash_distance;
+            if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
+                player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;  // Prevent out of bounds
+            }
+        }
+        can_dash = false;  // Start cooldown
+        shift_released = false;  // Prevent further dashes until shift is released
+    }
+
     // Normalize input_axis for proper direction
     input_axis = v2_normalize(input_axis);
 
     // Calculate speed modifier based on mouse button state
-    float speed_multiplier = (is_key_down(MOUSE_BUTTON_RIGHT)) ? 0.5f : 1.0f;  // Move at half speed if left mouse is held down
+    float speed_multiplier = (is_key_down(MOUSE_BUTTON_RIGHT)) ? 0.5f : 1.0f;  // Move at half speed if right mouse is held down
 
     // Acceleration
     if (moving) {
@@ -1420,6 +1458,9 @@ void update_player_position(Player* player) {
         }
     }
 }
+
+
+
 
 
 void limit_player_position(Player* player){
