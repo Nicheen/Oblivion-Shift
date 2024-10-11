@@ -2,13 +2,11 @@
 // Types (typedef enum)
 // -----------------------------------------------------------------------
 
-typedef enum View_Mode {
-	VIEW_GAME_AFTER_POSTPROCESS,
-	VIEW_GAME_BEFORE_POSTPROCESS,
-	VIEW_BLOOM_MAP,
-	
-	VIEW_MODE_MAX
-} View_Mode; 
+typedef enum Layers {
+	layer_background = 0,
+	layer_world = 10,
+	layer_ui = 20,
+} Layers;
 
 typedef enum TimedEventType {
 	TIMED_EVENT_NIL = 0,
@@ -18,6 +16,7 @@ typedef enum TimedEventType {
 	TIMED_EVENT_BOSS_MOVEMENT = 3,
 	TIMED_EVENT_BOSS_ATTACK = 4,
 	TIMED_EVENT_EFFECT = 5,
+	TIMED_EVENT_DROP = 6,
 
 	TIMED_EVENT_MAX,
 } TimedEventType;
