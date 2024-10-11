@@ -230,7 +230,7 @@ TimedEvent* initialize_boss_movement_event_stage_30(World* world) {
 
     te->type = TIMED_EVENT_BOSS_MOVEMENT;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 1.0f; // Interval for new random values
+    te->interval = 3.0f; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -275,7 +275,7 @@ TimedEvent* initialize_boss_attack_event_stage_30(World* world) {
 
     te->type = TIMED_EVENT_BOSS_ATTACK;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 1.0f; // Interval for new random values
+    te->interval = 0.5f; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -285,7 +285,7 @@ TimedEvent* initialize_boss_attack_event_stage_30(World* world) {
     return te;
 }
 
-TimedEvent* initialize_boss_second_stage_enent_stage_30(World* world) {
+TimedEvent* initialize_boss_second_stage_event_stage_30(World* world) {
 	TimedEvent* te = create_timedevent(world);
 
     te->type = TIMED_EVENT_EFFECT;
@@ -572,7 +572,7 @@ void particle_emit(Vector2 pos, Vector4 color, int n_particles, ParticleKind kin
 				// Ge partikeln fysikegenskaper
 				p->flags |= PARTICLE_FLAGS_physics; // Ingen gravitation för vind
 				p->pos = v2(window.width / 2, get_random_float32_in_range(-window.height / 2, window.height / 2)); // Starta från höger sida
-				p->col = v4(0.7, 0.7, 1.0, 0.5); // Ljusblå färg för vind
+				p->col = v4(0.7, 0.7, 1.0, 0.01); // Ljusblå färg för vind
 				p->velocity = v2(-50 * a, get_random_float32_in_range(-5, 5)); // Blåser åt vänster med mindre vertikal rörelse för mer stabilitet
 				p->size = v2_mulf(v2(10, 1), a * 2); // Längre partikelstorlek för vind, med varierande storlek
 				p->immortal = true; // Partiklarna ska finnas kvar
@@ -789,19 +789,20 @@ void setup_boss_stage_20(Entity* entity) {
 }
 
 void setup_boss_stage_30(Entity* entity) {
-	entity->entitytype = ENTITY_BOSS;
+    entity->entitytype = ENTITY_BOSS;
 
-	entity->first_stage_boss_stage_30 = true;
-	entity->health = 10;
-	entity->start_health = entity->health;
-	entity->color = rgba(20, 50, 243, 255);
-	entity->size = v2(50, 50);
-	entity->start_size = entity->size;
-	entity->position = v2(entity->position.x , 200);
-	entity->timer = initialize_boss_movement_event_stage_30(world);
-	entity->second_timer = initialize_boss_attack_event_stage_30(world);
-	entity->third_timer = initialize_boss_second_stage_enent_stage_30(world);
+    entity->first_stage_boss_stage_30 = true;
+    entity->health = 10;
+    entity->start_health = entity->health;
+    entity->color = rgba(20, 50, 243, 255);
+    entity->size = v2(50, 50);
+    entity->start_size = entity->size;
+    entity->position = v2(entity->position.x , 200);
+    entity->timer = initialize_boss_movement_event_stage_30(world);
+    entity->second_timer = initialize_boss_attack_event_stage_30(world);
+    entity->third_timer = initialize_boss_second_stage_event_stage_30(world);
 }
+
 
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = ENTITY_OBSTACLE;
@@ -1307,12 +1308,17 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 }
 
 void handle_beam_collision(Entity* beam, Player* player) {
-	// TODO: Implement a timer so player gets damaged slowly
-	int damage = 1.0f; // This can be changes in the future
-	number_of_shots_missed++;
-	player->is_immune = true;
-    player->immunity_timer = 1.0f;
+	// Skada spelaren om den inte är immun
+	if (!player->is_immune) {
+		int damage = 1.0f;  // Den här skadan kan justeras senare
+		number_of_shots_missed++;
+		
+		// Sätt immunitet och starta timer
+		player->is_immune = true;
+		player->immunity_timer = 1.0f;  // 1 sekunds immunitet
+	}
 }
+
 
 void handle_player_attack(Entity* projectile) {
 	// Adjust damage based on charge time
@@ -1351,18 +1357,18 @@ void handle_player_attack(Entity* projectile) {
 //                         PLAYER FUNCTIONS
 // -----------------------------------------------------------------------
 void update_player(Player* player) {
-    // Hantera immunitet
+    // Hantera immunitetstiden
     if (player->is_immune) {
-        player->immunity_timer -= delta_t; // Minska timer
+        player->immunity_timer -= delta_t;  // Minska timer för varje frame
+        
         if (player->immunity_timer <= 0.0f) {
-            player->is_immune = false; // Spelaren är inte längre immun
-        }
-	if (player->immunity_timer <= 0.0f) {
-            player->is_immune = false; // Spelaren är inte längre immun
+            // När timern har gått ut, återställ immuniteten
+            player->is_immune = false;
+            player->immunity_timer = 0.0f;  // Sätt timer till 0 (även om det är redundant, det klargör att immuniteten är slut)
         }
     }
-    
 }
+
 
 void update_player_position(Player* player) {
     Vector2 input_axis = v2(0, 0);  // Initialize input axis
@@ -1419,12 +1425,12 @@ void update_player_position(Player* player) {
     }
 
     // Check if shift has been released
-    if (!is_key_down(KEY_SHIFT)) {
+    if (!is_key_down('S')) {
         shift_released = true;  // Reset shift_released when shift is not pressed
     }
 
     // Dash (teleport) when shift is pressed AND shift was previously released
-    if (is_key_down(KEY_SHIFT) && shift_released && can_dash && (is_key_down('A') || is_key_down('D'))) {
+    if (is_key_down('S') && shift_released && can_dash && (is_key_down('A') || is_key_down('D'))) {
         if (previous_input == 0) {
             // Dashing to the left
             player->entity->position.x -= dash_distance;
@@ -1471,10 +1477,6 @@ void update_player_position(Player* player) {
     }
 }
 
-
-
-
-
 void limit_player_position(Player* player){
     // Begränsa spelarens position inom spelområdet
     if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
@@ -1503,6 +1505,23 @@ void limit_player_position(Player* player){
 // -----------------------------------------------------------------------
 //                   UPDATE FUNCTIONS FOR UPDATE LOOP
 // -----------------------------------------------------------------------
+
+void update_boss_position_if_over_limit(Entity* boss) {
+    // Uppdatera bossens position baserat på dess hastighet
+    boss->position.x += boss->velocity.x * delta_t;  // Uppdatera x-position
+
+    // Kontrollera gränserna och byta riktning
+    if (boss->position.x < -PLAYABLE_WIDTH / 2 + boss->size.x / 2) {
+        // Om bossen når vänster gräns, byt riktning
+        boss->velocity.x = fabs(boss->velocity.x);  // Sätt hastigheten positiv (höger)
+        boss->position.x = -PLAYABLE_WIDTH / 2 + boss->size.x / 2;  // Se till att bossen stannar inom gränsen
+    } else if (boss->position.x > PLAYABLE_WIDTH / 2 - boss->size.x / 2) {
+        // Om bossen når höger gräns, byt riktning
+        boss->velocity.x = -fabs(boss->velocity.x);  // Sätt hastigheten negativ (vänster)
+        boss->position.x = PLAYABLE_WIDTH / 2 - boss->size.x / 2;  // Se till att bossen stannar inom gränsen
+    }
+}
+
 void update_boss_stage_10(Entity* entity) 
 {
 	if (timer_finished(entity->second_timer)) {
@@ -1511,6 +1530,7 @@ void update_boss_stage_10(Entity* entity)
 		summon_icicle(p1, v2_add(entity->position, v2(entity->size.x, 0)));
 		summon_icicle(p2, v2_sub(entity->position, v2(entity->size.x, 0)));
 	}
+	update_boss_position_if_over_limit(entity);
 }
 
 Vector2 update_boss_stage_10_velocity(Vector2 velocity) 
@@ -1559,20 +1579,32 @@ void update_boss_stage_20(Entity* entity)
             }
         }
     }
+	update_boss_position_if_over_limit(entity);
 }
 
 
-void update_boss_stage_30(Entity* entity) 
-{
-	if (timer_finished(entity->second_timer)) {
-		Entity* p1 = create_entity();
-		summon_projectile_drop_boss_stage_30(p1, v2_add(entity->position, v2(0, -entity->size.y)));
-	}
-	if (timer_finished(entity->third_timer)) {
-		entity->first_stage_boss_stage_30 = false;
-	}
-}
+void update_boss_stage_30(Entity* entity) {
+    // Om andra timern (för attacker) har löpt ut, skapa en projektil
+    if (timer_finished(entity->second_timer)) {
+        Entity* p1 = create_entity();
+        summon_projectile_drop_boss_stage_30(p1, v2_add(entity->position, v2(0, -entity->size.y)));
 
+        // Om bossen är i andra fasen, förläng intervallet för nästa attack
+        if (!entity->first_stage_boss_stage_30) {
+            entity->second_timer->interval = 3.0f;  // Exempel: Gör attacker långsammare i andra fasen
+        }
+    }
+
+    // Om tredje timern (övergång till andra fasen) har löpt ut
+    if (timer_finished(entity->third_timer)) {
+        entity->first_stage_boss_stage_30 = false;  // Övergång till andra fasen
+        entity->velocity = v2(0, 0);  // Nollställ hastigheten
+
+        // När bossen går in i andra fasen, justera attackintervallet
+        entity->second_timer->interval = 5.0f;  // Öka intervallet (sakta ner attacker) i andra fasen
+    }
+	update_boss_position_if_over_limit(entity);
+}
 
 Vector2 update_boss_stage_30_position(Vector2 current_position) {
 	float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);
@@ -1582,24 +1614,16 @@ Vector2 update_boss_stage_30_position(Vector2 current_position) {
 }
 
 Vector2 update_boss_stage_30_velocity(Vector2 velocity, Entity* entity) {
-    // Variabler för rörelse baserat på sinus
-    float velocity_amplitude = 0.0f;
-    float new_velocity_x = 0.0f;
-
-    // Kolla vilken fas bossen är i
+	float velocity_amplitude = 100.0f;
     if (entity->first_stage_boss_stage_30) {
-        // Om bossen är i den första fasen
-        velocity_amplitude = get_random_float32_in_range(70.0f, 100.0f); // Amplitud för hastighetsändringar
-        new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); // Modifiera x-hastighet
-		
-    } else if (!entity->first_stage_boss_stage_30) {
-        // Om bossen är i den andra fasen, teleportera och returnera noll hastighet
-		entity->position = update_boss_stage_30_position(entity->position); // Anropa en funktion för att teleportera
-        return v2(0, 0); // Ingen rörelse
+        // Sinusrörelse i första fasen
+        float new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); 
+        return v2(new_velocity_x, 0);  // Returnera x-hastighet för sinusrörelse
+    } else {
+        // I andra fasen ska hastigheten vara noll
+        return v2(0, 0);  // Ingen rörelse, noll hastighet
     }
-	return v2(new_velocity_x, 0);
 }
-
 
 Vector2 update_boss_stage_20_velocity(Vector2 velocity) 
 {
@@ -1633,18 +1657,17 @@ void update_wave_effect(Entity* entity)
 	entity->size = v2_add(entity->start_size, v2(size_value, size_value));
 }
 
-void update_obstacle_beam(Entity* entity) 
-{
-	if (entity->child != NULL) {
-		if (rect_rect_collision(entity->child, player->entity)) {
-			if (!player->is_immune) {
-				handle_beam_collision(entity->child, player);
-				player->is_immune = true; // Sätt spelaren som immun
-				player->immunity_timer = 1.0f; // Sätt timer för immunitet
-			}
-		}
-	}
+void update_obstacle_beam(Entity* entity) {
+    if (entity->child != NULL) {
+        if (rect_rect_collision(entity->child, player->entity)) {
+            if (!player->is_immune) {
+                // Om spelaren inte är immun, hantera kollision och sätt immunitet
+                handle_beam_collision(entity->child, player);
+            }
+        }
+    }
 }
+
 
 // -----------------------------------------------------------------------
 //                   DRAW FUNCTIONS FOR DRAW LOOP
@@ -1818,17 +1841,20 @@ void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {
 }	
 
 void draw_boss_stage_30(Entity* entity, Draw_Frame* frame) {
-    // Update the velocity based on the timer
     if (timer_finished(entity->timer)) {
-		if (entity->first_stage_boss_stage_30){
-        	entity->velocity = update_boss_stage_30_velocity(entity->velocity, entity);
-		}
-		if (!entity->first_stage_boss_stage_30) {
-			entity->position = update_boss_stage_30_position(entity->position);
-		}
-	}
+        if (entity->first_stage_boss_stage_30) {
+            // Endast uppdatera velocity och position i första fasen
+            entity->velocity = update_boss_stage_30_velocity(entity->velocity, entity);
+            entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
+        } else {
+            // I andra fasen ska bossen bara teleportera sig
+            entity->position = update_boss_stage_30_position(entity->position);
+        }
+    }
     draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
 }
+
+
 
 void draw_boss_health_bar(Draw_Frame* frame) {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
@@ -2170,7 +2196,7 @@ void stage_21_to_29() {
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
 	int n_wind_particles = number_of_certain_particle(PFX_WIND);
-	particle_emit(v2(0, 0), v4(0.5, 0.3, 0.1, 1.0), 100 * ((float)current_stage_level / (float)10) - n_wind_particles, PFX_WIND);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), 100 * ((float)current_stage_level / (float)10) - n_wind_particles, PFX_WIND);
 }
 
 void stage_30_boss() {
@@ -2668,7 +2694,11 @@ int entry(int argc, char **argv) {
 					enhanced_projectile_damage = true;
 					enhanced_projectile_speed = false;  // Enable damage enhancement
 				}
+				// Reset the charge time when toggling enhancements
+				charge_time_projectile = 0.0f;  // Reset the charge time to prevent unintended effects
 			}
+		
+
 
 			if (player->entity->is_valid && !game_over && !is_game_paused) {
 				
@@ -2706,6 +2736,7 @@ int entry(int argc, char **argv) {
 				}
 				// Update player position as usual
 				update_player_position(player);
+				update_player(player);
 			}
 		}
 
