@@ -823,6 +823,102 @@ void setup_boss_stage_30(Entity* entity) {
     entity->third_timer = initialize_boss_second_stage_event_stage_30();
 }
 
+void setup_block_obstacle(Entity* entity) {
+    entity->obstacle_type = OBSTACLE_BLOCK;
+    entity->health = 9999;
+    entity->size = v2(30, 30);
+
+    // Define Tetris block matrices as statically allocated arrays
+    int I_block[1][4] = { { 1, 1, 1, 1 } };  // 1x4
+    int O_block[2][2] = { { 1, 1 }, { 1, 1 } };  // 2x2
+    int T_block[2][3] = { { 0, 1, 0 }, { 1, 1, 1 } };  // 2x3
+    int L_block[3][2] = { { 1, 0 }, { 1, 0 }, { 1, 1 } };  // 3x2
+    int J_block[3][2] = { { 0, 1 }, { 0, 1 }, { 1, 1 } };  // 3x2
+    int S_block[2][3] = { { 0, 1, 1 }, { 1, 1, 0 } };  // 2x3
+    int Z_block[2][3] = { { 1, 1, 0 }, { 0, 1, 1 } };  // 2x3
+
+    // Randomly pick one of the 7 Tetris blocks
+    int block_type = get_random_int_in_range(0, 6);
+
+    // Initialize matrix dimensions based on the block type
+    int rows = 0, cols = 0;
+    int (*selected_block)[4] = NULL;  // Adjust for maximum column width of 4
+    
+	switch (block_type) {
+        case 0: // I-block
+            rows = 1; cols = 4;
+            selected_block = (int (*)[4])I_block;
+            break;
+        case 1: // O-block
+            rows = 2; cols = 2;
+            selected_block = (int (*)[4])O_block;
+            break;
+        case 2: // T-block
+            rows = 2; cols = 3;
+            selected_block = (int (*)[4])T_block;
+            break;
+        case 3: // L-block
+            rows = 3; cols = 2;
+            selected_block = (int (*)[4])L_block;
+            break;
+        case 4: // J-block
+            rows = 3; cols = 2;
+            selected_block = (int (*)[4])J_block;
+            break;
+        case 5: // S-block
+            rows = 2; cols = 3;
+            selected_block = (int (*)[4])S_block;
+            break;
+        case 6: // Z-block
+            rows = 2; cols = 3;
+            selected_block = (int (*)[4])Z_block;
+            break;
+    }
+
+    // Use alloc function with the allocator and size
+	Allocator allocator = get_heap_allocator();
+	entity->block_matrix = (int**)alloc(allocator, rows * sizeof(int*));
+	for (int i = 0; i < rows; i++) {
+		entity->block_matrix[i] = (int*)alloc(allocator, cols * sizeof(int));
+		for (int j = 0; j < cols; j++) {
+			entity->block_matrix[i][j] = selected_block[i][j];
+		}
+	}
+
+    // Create and position block obstacles based on the matrix
+    Entity* previous_chain = entity;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            if (entity->block_matrix[i][j] == 1) {
+                Entity* block_entity;
+                if (i == 0 && j == 0) {
+                    // First block is the main entity itself
+                    block_entity = entity;
+                } else {
+                    block_entity = create_entity();
+                }
+
+				block_entity->entitytype = ENTITY_OBSTACLE;
+                block_entity->obstacle_type = OBSTACLE_BLOCK;
+                block_entity->health = 9999;
+                block_entity->size = v2(30, 30);
+                block_entity->matrix_position = v2(i, j);
+
+                // Position based on the matrix (adjust 40 units for space between blocks)
+                Vector2 offset = v2(j * 40, i * 40);  // Spacing for row and column
+                block_entity->position = v2_add(entity->position, offset);
+
+                if (previous_chain != entity || (i != 0 && j != 0)) {
+                    // Chain the previous entity to the new one
+                    previous_chain->child = block_entity;
+                    previous_chain = block_entity;
+                }
+            }
+        }
+    }
+}
+
+
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	entity->entitytype = ENTITY_OBSTACLE;
 
@@ -856,10 +952,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	// Check for Block Obstacle (next 10% chance, i.e., 0.4 < random_value <= 0.5)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) 
 	{
-		entity->obstacle_type = OBSTACLE_BLOCK;
-		entity->health = 9999;
-		entity->size = v2(30, 30);
-
+		setup_block_obstacle(entity);
 		number_of_block_obstacles++;
 	} 
 	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
@@ -1042,6 +1135,9 @@ void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		TimedEvent* timer = &world->timedevents[i];
+		if (entity->entitytype == ENTITY_PROJECTILE && entity->is_valid) {
+			destroy_entity(entity);
+		}
 		if (entity->entitytype == ENTITY_OBSTACLE && entity->is_valid) {
 			destroy_entity(entity);
 		}
@@ -1068,6 +1164,7 @@ void projectile_bounce(Entity* projectile, Entity* obstacle) {
 		destroy_entity(projectile);
 		return;
 	}
+
 	particle_emit(projectile->position, COLOR_WHITE, 10, PFX_BOUNCE);
 
 	Vector2 pos_diff = v2_sub(projectile->position, obstacle->position);
@@ -1703,6 +1800,18 @@ void update_obstacle_drop(Entity* entity) {
 //                   DRAW FUNCTIONS FOR DRAW LOOP
 // -----------------------------------------------------------------------
 
+void draw_obstacle_block(Entity* entity) {
+	entity->color = rgba(30, 30, 30, 255);
+	Vector4 outline_color = COLOR_WHITE;
+	Vector2 draw_pos = v2_sub(entity->position, v2_mulf(entity->size, 0.5));
+
+	// Draw the outline with four lines
+	draw_line_in_frame(draw_pos, v2_add(draw_pos, v2(entity->size.x, 0)), 2.0f, outline_color, current_draw_frame);
+	draw_line_in_frame(draw_pos, v2_add(draw_pos, v2(0, entity->size.y)), 2.0f, outline_color, current_draw_frame);
+	draw_line_in_frame(v2_add(draw_pos, v2(entity->size.x, 0)), v2_add(draw_pos, entity->size), 2.0f, outline_color, current_draw_frame);
+	draw_line_in_frame(v2_add(draw_pos, v2(0, entity->size.y)), v2_add(draw_pos, entity->size), 2.0f, outline_color, current_draw_frame);
+}
+
 void draw_drop(Entity* entity) {
 	draw_centered_in_frame_circle(entity->child->position, entity->child->size, entity->child->color, current_draw_frame);					
 }
@@ -2205,6 +2314,7 @@ void stage_0_to_9() {
 }
 
 void stage_10_boss() {
+	summon_world(0);
     Entity* boss = create_entity();
     setup_boss_stage_10(boss);
 
@@ -2385,7 +2495,7 @@ void draw_game() {
 				case(OBSTACLE_DROP):  draw_drop(entity); break;
 				case(OBSTACLE_BEAM):  draw_beam(entity); break;
 				case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
-				case(OBSTACLE_BLOCK): entity->color = v4(0.2, 0.2, 0.2, 0.3 * sin(2*now) + 0.7); break;
+				case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
 		
 				default: { } break; 
 			}
@@ -2732,7 +2842,7 @@ int entry(int argc, char **argv) {
 						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 				
-				if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
+				if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) {
 					consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
 					// Create a new projectile and set its properties

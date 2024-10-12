@@ -54,6 +54,9 @@ typedef struct Entity {
 	// --- Entity Type Below ---
 	//Boss
 	bool first_stage_boss_stage_30;
+	// --- New Attributes for Block Obstacles ---
+	Vector2 matrix_position;  // Entity's position in the structure matrix
+	int** block_matrix;       // 2D matrix for the structure layout
 	// Obstacle
 	enum ObstacleType obstacle_type;
 	float wave_time;
