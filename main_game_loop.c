@@ -1583,33 +1583,46 @@ Vector2 update_boss_stage_20_velocity(Vector2 velocity)
 }
 
 void update_boss_stage_20(Entity* entity) 
-{	// Update the velocity based on the timer
+{
+    static float teleport_timer = 0.0f;
+    static float cooldown_timer = 0.0f;
+    static bool teleport_ready = false;
+
     if (timer_finished(entity->timer)) {
         entity->velocity = update_boss_stage_20_velocity(entity->velocity);
     }  
 
-    static float teleport_timer = 0.0f; // Timer to track teleportation delay (in seconds)
-
     if (entity->child != NULL) {
         if (timer_finished(entity->child->timer)) {
-            summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0))); // Create the beam at the correct position
-			handle_beam_collision(entity);
-            teleport_timer = 2.0f; // Start the teleport delay (1 second)
-        }
-
-        // If beam has fired, start the teleportation countdown
-        if (entity->child->is_visible) {
-            teleport_timer -= delta_t; // Decrease the timer by the current_draw_frame's time
-
-            // Once the timer reaches 0 or less, teleport the boss
-            if (teleport_timer <= 0.0f) {
-                entity->position = update_boss_stage_20_position(entity->position); // Teleport the boss
-            }
+            summon_beam(entity->child, v2_sub(entity->position, v2(entity->size.x, 0)));
+            handle_beam_collision(entity);
+            teleport_timer = 1.0f;
+            teleport_ready = false;
         }
     }
 
-	update_boss_position_if_over_limit(entity);
+    if (!entity->child->is_visible && teleport_timer > 0.0f) {
+        teleport_timer -= delta_t;
+
+        if (teleport_timer <= 0.0f) {
+            entity->position = update_boss_stage_20_position(entity->position);
+            teleport_ready = true;
+            cooldown_timer = 3.0f;
+        }
+    }
+
+    if (teleport_ready && cooldown_timer > 0.0f) {
+        cooldown_timer -= delta_t;
+
+        if (cooldown_timer <= 0.0f) {
+            teleport_ready = false;
+        }
+    }
+
+    update_boss_position_if_over_limit(entity);
 }
+
+
 
 void update_boss_stage_30(Entity* entity) {
     // Om andra timern (för attacker) har löpt ut, skapa en projektil
