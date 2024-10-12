@@ -1,6 +1,23 @@
 #define m4_identity m4_make_scale(v3(1, 1, 1))
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
 
+// got this from ryan fleury's codebase, https://www.rfleury.com/ (originally called DeferLoop)
+#define defer_scope(start, end) for(int _i_ = ((start), 0); _i_ == 0; _i_ += 1, (end))
+
+#define scope_z_layer(Z) defer_scope(push_z_layer_in_frame(Z, current_draw_frame), pop_z_layer_in_frame(current_draw_frame))
+
+float max_trauma = 0.6;
+float camera_trauma = 0;
+
+Vector2 camera_pos = {0};
+
+void camera_shake(float amount) {
+	camera_trauma += amount;
+	if (camera_trauma > max_trauma) {
+		camera_trauma = max_trauma;
+	}
+}
+
 Vector2 normalize(Vector2 v) {
     float length = sqrt(v.x * v.x + v.y * v.y);
     if (length > 0) {

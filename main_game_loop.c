@@ -22,6 +22,7 @@ int number_of_block_obstacles = 0;
 int number_of_particles = 0;
 
 float projectile_speed = 500;
+float max_cam_shake_translate = 200.0f;
 int number_of_hearts = 3;
 int current_stage_level = 0;
 int obstacle_count = 0;
@@ -30,6 +31,7 @@ int latest_fps = 0;
 int entity_counter = 0;
 const u32 font_height = 48;
 LightSource lights[MAX_LIGHTS];
+Draw_Frame* current_draw_frame = 0;
 float stage_times[100];
 float stage_timer;
 
@@ -426,7 +428,7 @@ void particle_update() {
 	}
 }
 
-int particle_render(Draw_Frame* frame) {
+int particle_render() {
 	number_of_particles = 0;
 	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
 		Particle* p = &particles[i];
@@ -469,7 +471,7 @@ int particle_render(Draw_Frame* frame) {
 			col.a *= float_alpha(fabsf(v2_length(p->velocity)), 0, p->fade_out_vel_range);
 		}
 
-		draw_centered_in_frame_rect(p->pos, p->size, col, frame);
+		draw_centered_in_frame_rect(p->pos, p->size, col, current_draw_frame);
 	}
 	return number_of_particles;
 }
@@ -1337,7 +1339,7 @@ void handle_beam_collision(Entity* entity) {
 void update_player(Player* player) {
     // Hantera immunitetstiden
     if (player->is_immune) {
-        player->immunity_timer -= delta_t;  // Minska timer för varje frame
+        player->immunity_timer -= delta_t;  // Minska timer för varje current_draw_frame
         
         if (player->immunity_timer <= 0.0f) {
             // När timern har gått ut, återställ immuniteten
@@ -1597,7 +1599,7 @@ void update_boss_stage_20(Entity* entity)
 
         // If beam has fired, start the teleportation countdown
         if (entity->child->is_visible) {
-            teleport_timer -= delta_t; // Decrease the timer by the frame's time
+            teleport_timer -= delta_t; // Decrease the timer by the current_draw_frame's time
 
             // Once the timer reaches 0 or less, teleport the boss
             if (teleport_timer <= 0.0f) {
@@ -1701,17 +1703,16 @@ void update_obstacle_drop(Entity* entity) {
 //                   DRAW FUNCTIONS FOR DRAW LOOP
 // -----------------------------------------------------------------------
 
-void draw_drop(Entity* entity, Draw_Frame* frame) {
-	draw_centered_in_frame_circle(entity->child->position, entity->child->size, entity->child->color, frame);					
+void draw_drop(Entity* entity) {
+	draw_centered_in_frame_circle(entity->child->position, entity->child->size, entity->child->color, current_draw_frame);					
 }
 
-void draw_beam(Entity* entity, Draw_Frame* frame) {
+void draw_beam(Entity* entity) {
     if (entity->child != NULL) {
         float max_beam_size = 5.0f;
-
-		entity->child->is_visible = false;
-
+		
         if (timer_finished(entity->child->timer)) {
+			if (!entity->child->is_visible) camera_shake(0.2);
 			entity->child->is_visible = true;
 
             // Draw the real beam (red), centered on the entity
@@ -1719,18 +1720,21 @@ void draw_beam(Entity* entity, Draw_Frame* frame) {
 
 			entity->child->size = v2_mul(v2(max_beam_size, entity->position.y + window.height / 2), v2(1, beam_shoot_alpha));
 			entity->child->position = v2_sub(entity->position, v2(entity->child->size.x / 2, entity->child->size.y + entity->size.y / 2));
-			
-            draw_rect_in_frame(entity->child->position, entity->child->size, COLOR_WHITE, frame);
+            draw_rect_in_frame(entity->child->position, entity->child->size, COLOR_WHITE, current_draw_frame);
         }
+		else
+		{
+			entity->child->is_visible = false;
+		}
     }
 }
 
-void draw_playable_area_borders(Draw_Frame* frame) {
-	draw_line_in_frame(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, frame);
-	draw_line_in_frame(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, frame);
+void draw_playable_area_borders() {
+	draw_line_in_frame(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
+	draw_line_in_frame(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
 }
 
-void draw_death_borders(TimedEvent* timedevent, Draw_Frame* frame) {
+void draw_death_borders(TimedEvent* timedevent) {
 
 	// Use uint32_t instead of s64
 	uint32_t lava_colors[5] = {
@@ -1758,8 +1762,8 @@ void draw_death_borders(TimedEvent* timedevent, Draw_Frame* frame) {
 	float wave = 5*(sin(os_get_elapsed_seconds()) + 3);	
 	
 	barrier_color = color;
-	draw_line_in_frame(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, barrier_color, frame);
-	draw_line_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, barrier_color, frame);
+	draw_line_in_frame(v2(-window.width / 2,  window.height / 2), v2(window.width / 2,  window.height/2), wave, barrier_color, current_draw_frame);
+	draw_line_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width / 2, -window.height/2), wave, barrier_color, current_draw_frame);
 
 }
 
@@ -1831,7 +1835,7 @@ bool draw_button(Gfx_Font* font, u32 font_height, string label, Vector2 pos, Vec
     return pressed;
 }
 
-void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
+void draw_boss_stage_10(Entity* entity) {
     // Amplitudes for the movement (lower values for more subtle movement)
     float amplitude_x = 5.0f; // Reduced amplitude for x-axis
     float amplitude_y = 10.0f;  // Reduced amplitude for y-axis
@@ -1841,30 +1845,30 @@ void draw_boss_stage_10(Entity* entity, Draw_Frame* frame) {
     entity->size = v2_mulf(entity->start_size, size_scale); // Use start_size for scaling
 
     // Draw the boss with the updated position and scaled size
-    draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
-    draw_centered_in_frame_rect(v2_add(entity->position, v2(entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, frame);
-    draw_centered_in_frame_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, frame);
+    draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+    draw_centered_in_frame_rect(v2_add(entity->position, v2(entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, current_draw_frame);
+    draw_centered_in_frame_rect(v2_add(entity->position, v2(-entity->size.x, 0)), v2_mulf(entity->size, 0.3), entity->color, current_draw_frame);
 }
 
-void draw_boss_stage_20(Entity* entity, Draw_Frame* frame) {  
+void draw_boss_stage_20(Entity* entity) {  
 
-	draw_beam(entity, frame);
+	draw_beam(entity);
 
     // Draw the boss with the updated position and scaled size
-	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, frame);
+	draw_centered_in_frame_circle(entity->position, entity->start_size, entity->color, current_draw_frame);
     
     // Justera y-värdet för att rita cirkeln högre upp
     Vector2 new_position = entity->position;
     new_position.y += 10;  
 
-    draw_centered_in_frame_circle(new_position, v2(23, 48), entity->color, frame);
+    draw_centered_in_frame_circle(new_position, v2(23, 48), entity->color, current_draw_frame);
 
 	Vector2 position_kube = entity->position;
     position_kube.y -= 7;  
-	draw_centered_in_frame_rect(position_kube, v2(18, 18), entity->color, frame);
+	draw_centered_in_frame_rect(position_kube, v2(18, 18), entity->color, current_draw_frame);
 }	
 
-void draw_boss_stage_30(Entity* entity, Draw_Frame* frame) {
+void draw_boss_stage_30(Entity* entity) {
     if (timer_finished(entity->timer)) {
         if (entity->first_stage_boss_stage_30) {
             // Endast uppdatera velocity och position i första fasen
@@ -1875,7 +1879,7 @@ void draw_boss_stage_30(Entity* entity, Draw_Frame* frame) {
             entity->position = update_boss_stage_30_position(entity->position);
         }
     }
-    draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
+    draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
 }
 
 void draw_boss_health_bar() {
@@ -1899,13 +1903,13 @@ void draw_boss_health_bar() {
 	}
 }
 
-void draw_center_stage_text(Draw_Frame* frame)
+void draw_center_stage_text()
 {
 	// Create the label using sprint
 	string label = sprint(get_temporary_allocator(), STR("%i"), current_stage_level);
 	u32 font_height = 48 + (current_stage_level*4);
 	Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
-	draw_text_in_frame(font_bold, label, font_height, v2(-m.visual_size.x / 2, 0), v2(1, 1), COLOR_WHITE, frame);
+	draw_text_in_frame(font_bold, label, font_height, v2(-m.visual_size.x / 2, 0), v2(1, 1), COLOR_WHITE, current_draw_frame);
 }
 
 void draw_effect_ui() {
@@ -2318,10 +2322,13 @@ void initialize_new_stage(World* world, int current_stage_level) {
 //
 // -----------------------------------------------------------------------
 
-void draw_game(Draw_Frame *frame) {
-	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, frame);
-	draw_center_stage_text(frame);
-	
+void draw_game() {
+	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
+	scope_z_layer(layer_background)
+	{
+		draw_center_stage_text();
+	}
+		
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
@@ -2332,24 +2339,24 @@ void draw_game(Draw_Frame *frame) {
 			Vector4 col = entity->color;
 			entity->color = v4(col.x, col.y, col.z, a);
 
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, frame);
+			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
 		if (entity->entitytype == ENTITY_PROJECTILE)
 		{
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, frame);
+			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 	
 		if (entity->entitytype == ENTITY_OBSTACLE)
 		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
+			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
 
 			switch(entity->obstacle_type) 
 			{
-				case(OBSTACLE_DROP):  draw_drop(entity, frame); break;
-				case(OBSTACLE_BEAM):  draw_beam(entity, frame); break;
+				case(OBSTACLE_DROP):  draw_drop(entity); break;
+				case(OBSTACLE_BEAM):  draw_beam(entity); break;
 				case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
 				case(OBSTACLE_BLOCK): entity->color = v4(0.2, 0.2, 0.2, 0.3 * sin(2*now) + 0.7); break;
 		
@@ -2359,19 +2366,19 @@ void draw_game(Draw_Frame *frame) {
 	
 		if (entity->entitytype == ENTITY_EFFECT) 
 		{
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, frame);
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
 		if (entity->entitytype == ENTITY_PLAYER)
 		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, frame);
+			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
 		if (entity->entitytype == ENTITY_BOSS) {
 			switch(current_stage_level) {
-				case(10): draw_boss_stage_10(entity, frame); break;
-				case(20): draw_boss_stage_20(entity, frame); break;
-				case(30): draw_boss_stage_30(entity, frame); break;
+				case(10): draw_boss_stage_10(entity); break;
+				case(20): draw_boss_stage_20(entity); break;
+				case(30): draw_boss_stage_30(entity); break;
 				default: break;
 			} break;
 		}
@@ -2381,12 +2388,11 @@ void draw_game(Draw_Frame *frame) {
 	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 		current_stage_level++;
 		initialize_new_stage(world, current_stage_level);
-		window.clear_color = world->world_background;
 	}
 
 	if (!(is_game_paused)) { particle_update(); }
 	
-	int number_of_particles = particle_render(frame);
+	int number_of_particles = particle_render();
 	
 	// Check if game is over or not
 	game_over = number_of_shots_missed >= number_of_hearts;
@@ -2405,9 +2411,9 @@ void draw_game(Draw_Frame *frame) {
 		draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
 	}
 
-	draw_playable_area_borders(frame);
+	draw_playable_area_borders();
 
-	draw_death_borders(color_switch_event, frame);
+	draw_death_borders(color_switch_event);
 }
 
 void update_game() {
@@ -2468,6 +2474,7 @@ void update_game() {
 
 				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2) {
 					number_of_shots_missed++;
+					camera_shake(0.3);
 					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
 					destroy_entity(entity);
 				}
@@ -2588,6 +2595,17 @@ int entry(int argc, char **argv) {
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
 
+		// Camera Stuff
+		camera_trauma -= delta_t;
+		camera_trauma = fmaxf(camera_trauma, 0);
+
+		float cam_shake = fminf(pow(camera_trauma, 3), 1);
+		float shake_x = max_cam_shake_translate * cam_shake * get_random_float32_in_range(-1, 1);
+		float shake_y = max_cam_shake_translate * cam_shake * get_random_float32_in_range(-1, 1);
+
+		draw_frame.projection = m4_make_orthographic_projection((window.width * -0.5) + shake_x, (window.width * 0.5) + shake_x, (window.height * -0.5) + shake_y, (window.height * 0.5) + shake_y, -1, 10);
+
+
 		// -----------------------------------------------------------------------
 		//                        HERE WE DO BUTTON INPUTS
 		// -----------------------------------------------------------------------
@@ -2640,7 +2658,6 @@ int entry(int argc, char **argv) {
 					int level_increment = key - '0';  // Convert char to the corresponding integer
 					current_stage_level += level_increment;
 					initialize_new_stage(world, current_stage_level);
-					window.clear_color = world->world_background;
 					break;  // Exit the loop after processing one key
 				}
 			}
@@ -2764,14 +2781,12 @@ int entry(int argc, char **argv) {
 			}
 		}
 		
-		// Reset draw frame & clear the image with a clear color
+		current_draw_frame = &offscreen_draw_frame;
 		draw_frame_reset(&offscreen_draw_frame);
-		
-		
 		gfx_clear_render_target(game_image, v4(.7, .7, .7, 1.0));
 		
 		// Draw game things to offscreen Draw_Frame
-		draw_game(&offscreen_draw_frame);
+		draw_game();
 		
 
 		// Set the shader & cbuffer before the render call
@@ -2779,18 +2794,19 @@ int entry(int argc, char **argv) {
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
 		
 		// Render Draw_Frame to the image
-		///// NOTE: Drawing to one frame like this will wait for the gpu to finish the last draw call. If this becomes
+		///// NOTE: Drawing to one current_draw_frame like this will wait for the gpu to finish the last draw call. If this becomes
 		// a performance bottleneck, you would have more frames "in flight" which you cycle through.
 		gfx_render_draw_frame(&offscreen_draw_frame, game_image);
 		
 		// Draw game with bloom map shader to the bloom map
-		// Reset draw frame & clear the image
+		// Reset draw current_draw_frame & clear the image
+		current_draw_frame = &offscreen_draw_frame;
 		draw_frame_reset(&offscreen_draw_frame);
 		gfx_clear_render_target(bloom_map, COLOR_BLACK);
 		
 		// Draw game things to offscreen Draw_Frame
 		
-		draw_game(&offscreen_draw_frame);
+		draw_game();
 		
 		// Set the shader & cbuffer before the render call
 		offscreen_draw_frame.shader_extension = bloom_map_shader;
@@ -2799,8 +2815,8 @@ int entry(int argc, char **argv) {
 		gfx_render_draw_frame(&offscreen_draw_frame, bloom_map);
 		
 		// Draw game image into final image, using the bloom shader which samples from the bloom_map
+		current_draw_frame = &offscreen_draw_frame;
 		draw_frame_reset(&offscreen_draw_frame);
-		
 		gfx_clear_render_target(final_image, COLOR_BLACK);
 		
 		// To sample from another image in the shader, we must bind it to a specific slot.
@@ -2816,35 +2832,36 @@ int entry(int argc, char **argv) {
 		
 		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 		
-		if (debug_mode) {
-			draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("Stage: %i"), current_stage_level), font_height, v2(-window.width / 2, window.height / 2 - 25), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), entity_counter), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
-			draw_text(font_light, sprint(get_temporary_allocator(), STR("light sources: %i"), scene_cbuffer.light_count), font_height, v2(-window.width / 2, window.height / 2 - 200), v2(0.4, 0.4), COLOR_GREEN);
-			draw_timed_events();
+		{ //  ---- DRAW UI ----
+			if (debug_mode) {
+				draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("Stage: %i"), current_stage_level), font_height, v2(-window.width / 2, window.height / 2 - 25), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), entity_counter), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("projectiles: %i"), number_of_shots_fired), font_height, v2(-window.width / 2, window.height / 2 - 150), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
+				draw_text(font_light, sprint(get_temporary_allocator(), STR("light sources: %i"), scene_cbuffer.light_count), font_height, v2(-window.width / 2, window.height / 2 - 200), v2(0.4, 0.4), COLOR_GREEN);
+				draw_timed_events();
+			}
+
+			draw_hearts();
+
+			draw_boss_health_bar();
+
+			draw_stage_timers();
+
+			draw_effect_ui();
+
+			draw_graphics_settings_menu();
+
+			draw_settings_menu();
+
+			draw_main_menu();
+
+			draw_starting_screen();
 		}
-
-		draw_hearts();
-
-		draw_boss_health_bar();
-
-		draw_stage_timers();
-
-		draw_effect_ui();
-
-		draw_graphics_settings_menu();
-
-		draw_settings_menu();
-
-		draw_main_menu();
-
-		draw_starting_screen();
-	
 		os_update();
 		gfx_update();
 
