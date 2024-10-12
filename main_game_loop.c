@@ -1710,7 +1710,7 @@ void draw_drop(Entity* entity) {
 void draw_beam(Entity* entity) {
     if (entity->child != NULL) {
         float max_beam_size = 5.0f;
-		
+
         if (timer_finished(entity->child->timer)) {
 			if (!entity->child->is_visible) camera_shake(0.2);
 			entity->child->is_visible = true;
@@ -2133,14 +2133,27 @@ void draw_stage_timers() {
     u32 font_height = 48;
     float base_y = 100; // Base Y position for the green text
 	if (debug_mode) { base_y -= 200; }; // Shift the draw element if debug mode is enabled
-	float base_x = -350; // Base X position for the green text
+	float base_x = -365; // Base X position for the green text
     float spacing = 25; // Spacing between texts
 
 	Vector4 current_timer_color = COLOR_GREEN;
 	Vector4 other_times_color = COLOR_WHITE;
 
     // Draw the green text (current stage timer)
-    string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_timer);
+	int minutes = (int)(stage_timer / 60) % 60;
+	int hours = (int)(stage_timer / 3600);
+	float seconds = stage_timer - (minutes * 60) - (hours * 3600);
+
+	// Format string based on time duration
+	string label;
+	if (hours > 0) {
+		// Show hours, minutes, seconds, and milliseconds
+		label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
+	} else {
+		// Show only minutes, seconds, and milliseconds
+		label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
+	}
+    
     draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), current_timer_color);
 
     // Limit the number of white texts to be drawn to a max of 5
@@ -2150,14 +2163,28 @@ void draw_stage_timers() {
     // Draw white times below the green text, newest at the top with fading effect
     for (int i = 0; i < times_to_draw; i++) {
         // Calculate transparency based on position: newest is opaque, older ones fade
-        float alpha = 1.0f - (i / (float)max_white_times);
+        float alpha = 1.0f - (i / (float)times_to_draw);
 
         // Set fading white color with variable alpha
         Vector4 faded_white = v4(other_times_color.r, other_times_color.g, other_times_color.b, alpha);
 
-        // Newest time should appear right below the green text
-        string label = sprint(get_temporary_allocator(), STR("%.2f"), stage_times[current_stage_level - i]);
-        draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
+        float time_in_seconds = stage_times[current_stage_level - i];
+
+		int minutes = (int)(time_in_seconds / 60) % 60;
+		int hours = (int)(time_in_seconds / 3600);
+		float seconds = time_in_seconds - (minutes * 60) - (hours * 3600);
+
+		// Format string based on time duration
+		string label;
+		if (hours > 0) {
+			// Show hours, minutes, seconds, and milliseconds
+			label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
+		} else {
+			// Show only minutes, seconds, and milliseconds
+			label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
+		}
+
+		draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
     }
 }
 
