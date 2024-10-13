@@ -2405,9 +2405,11 @@ void stage_0_to_9() {
 }
 
 void stage_10_boss() {
-	summon_world(0);
-    Entity* boss = create_entity();
-    setup_boss_stage_10(boss);
+	float r = 0.0f;
+    float g = 0.0f;
+    float b = (float)current_stage_level / 20.0f;
+	world->world_background = v4(r, g, b, 1.0f);
+	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
@@ -2431,8 +2433,12 @@ void stage_11_to_19() {
 
 void stage_20_boss() {
 	float stage_progress = current_stage_level - 10;
+	float r = (float)stage_progress / 20.0f;
+	float g = 0.0f;
+	float b = 0.0f;
     Entity* boss = create_entity();
     setup_boss_stage_20(boss);
+	world->world_background = v4(r, g, b, 1.0f);
 
     int n_existing_particles = number_of_certain_particle(PFX_ASH);
 	int particles_to_spawn = calculate_particles_to_spawn((float)stage_progress / 10.0f, n_existing_particles, 1000.0f);
@@ -2452,8 +2458,12 @@ void stage_21_to_29() {
 }
 
 void stage_30_boss() {
+	float r = 0.1f;
+	float g = 0.2f;
+	float b = 0.5f;
     Entity* boss = create_entity();
     setup_boss_stage_30(boss);
+	world->world_background = v4(r, g, b, 1.0f);
 
     int n_existing_particles = number_of_certain_particle(PFX_WIND);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 100.0f);
@@ -2461,6 +2471,7 @@ void stage_30_boss() {
 }
 
 void stage_31_to_39() {
+	
     float r = 0.5f;
     float g = 0.2f;
     float b = 0.0f; 
@@ -2473,8 +2484,12 @@ void stage_31_to_39() {
 }
 
 void stage_40_boss() {
+	float r = 0.5f;
+    float g = 0.2f;
+    float b = 0.0f; 
     Entity* boss = create_entity();
     setup_boss_stage_40(boss);
+	world->world_background = v4(r, g, b, 1.0f); 
 
     int n_existing_particles = number_of_certain_particle(PFX_LEAF);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
