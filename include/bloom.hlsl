@@ -32,6 +32,10 @@ Texture2D bloom_map: register(t0); // 0 because we bound to 0 in bloom.c
 */
 
 float4 pixel_shader_extension(PS_INPUT input, float4 color) {
+    if (input.type == 1) {
+        return color;
+    }
+
 	const int BLUR_SAMPLE_RADIUS_PIXELS = 5;
 	const float SAMPLES_PER_PIXEL = 1.0;
 	const int BLUR_SAMPLE_RADIUS = BLUR_SAMPLE_RADIUS_PIXELS*SAMPLES_PER_PIXEL;
@@ -40,7 +44,6 @@ float4 pixel_shader_extension(PS_INPUT input, float4 color) {
 	const float2 BLUR_OFFSET = float2(1.0 / window_size.x, 1.0/window_size.y) * 1.0/SAMPLES_PER_PIXEL;
 
     float4 total_bloom = float4(0, 0, 0, 0);
-    
     float total_weight = 0.0;
     float radius_sq = float(BLUR_SAMPLE_RADIUS * BLUR_SAMPLE_RADIUS);
 

@@ -67,5 +67,8 @@ float4 get_light_contribution(PS_INPUT input) {
 
 
 float4 pixel_shader_extension(PS_INPUT input, float4 color) {
+    if (input.type == 1) {
+        return color;
+    }
     return color + get_light_contribution(input);
 }

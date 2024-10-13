@@ -5,7 +5,7 @@
 #include "include/IndependentFunctions.c"
 #include "include/ExtraDrawFunctions.c"
 #include "include/easings.c"
-#include "include/Types.c"
+#include "include/types.c"
 #include "include/Structs.c"
 #include "include/particlesystem.c"
 
@@ -33,12 +33,15 @@ const u32 font_height = 48;
 LightSource lights[MAX_LIGHTS];
 Draw_Frame* current_draw_frame = 0;
 float stage_times[100];
+bool occupied_grid[GRID_WIDTH][GRID_HEIGHT]; // Tracks occupied cells
 float stage_timer;
 
 float charge_time_projectile;
 bool enhanced_projectile_damage = true;
 bool enhanced_projectile_speed = false;
 Vector4 barrier_color;
+Entity* selected_entity;
+Vector2 debug_entity_position;
 
 Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
@@ -72,6 +75,7 @@ Vector2 mouse_position; // the current mouse position
 float64 delta_t; // The difference in time between frames
 float64 now;
 TimedEvent* color_switch_event = 0;
+Entity* mouse_entity = 0;
 Player* player = 0;
 World* world = 0; // Create an empty world to use for functions below
 Gfx_Image* bloom_map = 0;
@@ -654,6 +658,13 @@ int calculate_particles_to_spawn(float alpha, int number_of_existing_particles, 
 //               SUMMON / SETUP / INITIALIZE FUNCTIONS
 // -----------------------------------------------------------------------
 
+Entity* setup_mouse_entity(Entity* entity) {
+	entity->size = v2(30, 30);
+	entity->color = v4(0.5, 0.5, 0.5, 0.5);
+
+	return entity;
+}
+
 Entity* setup_player_entity(Entity* entity) {
 	entity->entitytype = ENTITY_PLAYER;
 
@@ -770,13 +781,12 @@ void summon_projectile_stage_40(Entity* entity, Vector2 spawn_pos, float angle) 
     entity->velocity = v2(speed * cos(radians), speed * sin(radians)); // x-komponent, negativ y-komponent
 }
 
-
 void setup_effect(Effect* effect) {
 
 	float random_value = get_random_float64_in_range(0, 1);
 	float n_effects = 5;
 
-	effect->effect_duration = 4.0f;
+	effect->effect_duration = 15.0f;
 
 	if (random_value < 1/n_effects)
 	{
@@ -866,7 +876,7 @@ void setup_boss_stage_40(Entity* entity) {
 	entity->second_timer = initialize_boss_attack_event_stage_40();
 }
 
-void setup_block_obstacle(Entity* entity) {
+void setup_block_obstacle(Entity* entity, int x, int y) {
     entity->obstacle_type = OBSTACLE_BLOCK;
     entity->health = 9999;
     entity->size = v2(30, 30);
@@ -933,6 +943,17 @@ void setup_block_obstacle(Entity* entity) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             if (entity->block_matrix[i][j] == 1) {
+				int grid_x = x + i + 1;
+                int grid_y = y + j + 1;
+
+				// Check if the grid cell is already occupied
+                if (grid_x >= GRID_WIDTH || grid_x < 0 || grid_y >= GRID_HEIGHT || grid_y < 0 || occupied_grid[grid_x][grid_y]) {
+                    continue; // Skip if out of bounds or already occupied
+                }
+
+				// Mark the grid cell as occupied
+                occupied_grid[grid_x][grid_y] = true;
+
                 Entity* block_entity;
                 if (i == 0 && j == 0) {
                     // First block is the main entity itself
@@ -948,7 +969,7 @@ void setup_block_obstacle(Entity* entity) {
                 block_entity->matrix_position = v2(i, j);
 
                 // Position based on the matrix (adjust 40 units for space between blocks)
-                Vector2 offset = v2(j * 40, i * 40);  // Spacing for row and column
+                Vector2 offset = v2(j * 30, i * 30);  // Spacing for row and column
                 block_entity->position = v2_add(entity->position, offset);
 
                 if (previous_chain != entity || (i != 0 && j != 0)) {
@@ -961,8 +982,12 @@ void setup_block_obstacle(Entity* entity) {
     }
 }
 
-
 void setup_obstacle(Entity* entity, int x_index, int y_index) {
+	if (occupied_grid[x_index][y_index]) {
+        // If the cell is already occupied, skip this obstacle
+        return;
+    }
+
 	entity->entitytype = ENTITY_OBSTACLE;
 
 	int size = 21;
@@ -995,7 +1020,7 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 	// Check for Block Obstacle (next 10% chance, i.e., 0.4 < random_value <= 0.5)
 	else if (random_value <= SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) 
 	{
-		setup_block_obstacle(entity);
+		setup_block_obstacle(entity, x_index, y_index);
 		number_of_block_obstacles++;
 	} 
 	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
@@ -1017,6 +1042,9 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->color = v4(red, 0, blue, 1);
 	}
 
+	// Mark the grid cell as occupied
+    occupied_grid[x_index][y_index] = true;
+
 	world->obstacle_list[obstacle_count].obstacle = entity;
 	world->obstacle_list[obstacle_count].x = x_index;
 	world->obstacle_list[obstacle_count].y = y_index;
@@ -1036,10 +1064,20 @@ void setup_effect_entity(Entity* entity, Entity* obstacle) {
 
 // void summon_world() needs the be furthers down since it might use 
 // some of the functions above when summoning the world.
+
+void initialize_occupied_grid() {
+    // Initialize all grid cells as unoccupied (false)
+    for (int i = 0; i < GRID_WIDTH; i++) {
+        for (int j = 0; j < GRID_HEIGHT; j++) {
+            occupied_grid[i][j] = false;
+        }
+    }
+}
+
 void summon_world(float spawn_rate) {
 	for (int x = 0; x < GRID_WIDTH; x++) { // x
 		for (int y = 0; y < GRID_HEIGHT; y++) { // y
-			if (get_random_float64_in_range(0, 1) <= spawn_rate) {
+			if (!occupied_grid[x][y] && get_random_float64_in_range(0, 1) <= spawn_rate) {
 				Entity* entity = create_entity();
 				setup_obstacle(entity, x, y);
 			}
@@ -1176,6 +1214,7 @@ bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, in
 
 void clean_world() {
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+		Effect* effect = &world->effects[i];
 		Entity* entity = &world->entities[i];
 		TimedEvent* timer = &world->timedevents[i];
 		if (entity->entitytype == ENTITY_PROJECTILE && entity->is_valid) {
@@ -1189,6 +1228,9 @@ void clean_world() {
 		}
 		if (!(timer->worldtype == TIMED_EVENT_TYPE_WORLD) && timer->is_valid) {
 			destroy_timedevent(timer);
+		}
+		if (entity->entitytype == ENTITY_EFFECT && effect->is_valid) {
+			destroy_effect(effect);
 		}
 		if (world->obstacle_list[i].obstacle != NULL) {
             destroy_entity(world->obstacle_list[i].obstacle);  // Destroy the obstacle
@@ -1265,11 +1307,12 @@ void apply_damage(Entity* entity, float damage) {
 		if (entity->entitytype == ENTITY_OBSTACLE) {
 			number_of_destroyed_obstacles ++;
 			//propagate_wave(entity);
-			//float random_value_for_effect = get_random_float64_in_range(0, 1);
+			float random_value_for_effect = get_random_float64_in_range(0, 1);
 
-			Entity* effect_entity = create_entity();
-			setup_effect_entity(effect_entity, entity);
-			
+			if (random_value_for_effect > 0.9) {
+				Entity* effect_entity = create_entity();
+				setup_effect_entity(effect_entity, entity);
+			}
 			
 			// Get the grid position of the obstacle from the entity
 			Vector2 position = entity->grid_position;
@@ -1398,6 +1441,18 @@ bool circle_circle_collision(Entity* circle1, Entity* circle2) {
     return dist_squared <= radius_sum * radius_sum;
 }
 
+bool circle_circle_collision_2(Vector2 pos1, Vector2 pos2, Vector2 size1, Vector2 size2) {
+    // Calculate the distance between the centers of the two circles
+    Vector2 distance = v2_sub(pos1, pos2);
+    float dist_squared = distance.x * distance.x + distance.y * distance.y;
+
+    // Get the sum of the radii
+    float radius_sum = (size1.x / 2.0f) + (size2.x / 2.0f);  // Assuming size.x is the diameter
+
+    // Compare squared distance to squared radii sum (to avoid unnecessary sqrt calculation)
+    return dist_squared <= radius_sum * radius_sum;
+}
+
 bool rect_rect_collision(Entity* rect1, Entity* rect2, bool rect1_centered, bool rect2_centered) {
     float rect1_left, rect1_right, rect1_top, rect1_bottom;
     float rect2_left, rect2_right, rect2_top, rect2_bottom;
@@ -1464,7 +1519,7 @@ void handle_beam_collision(Entity* entity) {
 			if (rect_rect_collision(entity->child, player->entity, false, true)) {
 				if (!player->is_immune) {
 					number_of_shots_missed++;
-					
+					camera_shake(0.3);
 					player->is_immune = true; 		// Sätt immunitet och starta timer
 					player->immunity_timer = 1.0f;  // 1 sekunds immunitet
 				}
@@ -1762,8 +1817,6 @@ void update_boss_stage_20(Entity* entity)
     update_boss_position_if_over_limit(entity);
 }
 
-
-
 void update_boss_stage_30(Entity* entity) {
     // Om andra timern (för attacker) har löpt ut, skapa en projektil
     if (timer_finished(entity->second_timer)) {
@@ -1879,6 +1932,10 @@ void update_obstacle_drop(Entity* entity) {
 			entity->child->is_visible = false;
 		}
 	}
+}
+
+void update_mouse_entity_position(Entity* entity) {
+	entity->position = MOUSE_POSITION();
 }
 
 // -----------------------------------------------------------------------
@@ -2095,10 +2152,12 @@ void draw_boss_health_bar() {
 			float alpha = (float)entity->health / (float)entity->start_health;
 			draw_rect(v2(-health_bar_width / 2 - margin, window.height / 2 - health_bar_height - padding - margin), v2(health_bar_width + 2*margin, health_bar_height + 2*margin), v4(0.5, 0.5, 0.5, 0.5));
 			draw_rect(v2(-health_bar_width / 2, window.height / 2 - health_bar_height - padding), v2(health_bar_width*alpha, health_bar_height), v4(0.9, 0.0, 0.0, 0.7));
-			string label = sprint(get_temporary_allocator(), STR("%i"), entity->health);
-			u32 font_height = 48;
-			Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
-			draw_text(font_bold, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
+			if (entity->health > 1) {
+				string label = sprint(get_temporary_allocator(), STR("%i"), entity->health);
+				u32 font_height = 48;
+				Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+				draw_text(font_bold, label, font_height, v2(-health_bar_width / 2 + health_bar_width*alpha / 2 - m.visual_size.x / 2, window.height / 2 - health_bar_height - padding + 10), v2(1, 1), COLOR_WHITE);
+			}
 		}
 	}
 }
@@ -2388,6 +2447,35 @@ void draw_stage_timers() {
     }
 }
 
+void draw_selected_entity_information() {
+	if (!(debug_entity_position.x == 0.0f) && !(debug_entity_position.y == 0.0f)) {
+		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			Entity* entity = &world->entities[i];
+			if (!entity->is_valid) continue;
+			if (entity == mouse_entity) continue;
+
+			if (circle_circle_collision_2(entity->position, debug_entity_position, entity->size, mouse_entity->size)) {
+				selected_entity = entity;
+				draw_text(
+					font_light,
+					sprint(get_temporary_allocator(),
+					STR(
+					"Position: %v2\nSize: %v2\nColor: %v4\n"
+					), 
+					selected_entity->position,
+					selected_entity->size,
+					selected_entity->color),
+					font_height,
+					selected_entity->position,
+					v2(0.4, 0.4),
+					COLOR_GREEN
+				);
+				break;
+			}
+		}
+	}
+}
+
 // -----------------------------------------------------------------------
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
@@ -2405,19 +2493,19 @@ void stage_0_to_9() {
 }
 
 void stage_10_boss() {
-	float r = 0.0f;
-    float g = 0.0f;
-    float b = (float)current_stage_level / 20.0f;
-	world->world_background = v4(r, g, b, 1.0f);
-	summon_world(SPAWN_RATE_ALL_OBSTACLES);
+	//float r = 0.0f;
+    //float g = 0.0f;
+    //float b = (float)current_stage_level / 20.0f;
+	//world->world_background = v4(r, g, b, 1.0f);
+	Entity* boss = create_entity();
+	setup_boss_stage_10(boss);
 
-    int n_existing_particles = number_of_certain_particle(PFX_SNOW);
-	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
-    particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
+    //int n_existing_particles = number_of_certain_particle(PFX_SNOW);
+	//int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
+    //particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
 void stage_11_to_19() {
-	
 	float stage_progress = current_stage_level - 10;
 	float r = (float)stage_progress / 20.0f;
 	float g = 0.0f;
@@ -2585,25 +2673,23 @@ void draw_game() {
 		
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
+
 		if (!entity->is_valid) continue;
 
 		if (entity->entitytype == ENTITY_EFFECT)
 		{
-			float a = 0.2 * sin(7*now) + 0.8;
-			Vector4 col = entity->color;
-			entity->color = v4(col.x, col.y, col.z, a);
-
 			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
 			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
-		if (entity->entitytype == ENTITY_PROJECTILE)
+		else if (entity->entitytype == ENTITY_PROJECTILE)
 		{
+			log("Drawing projectile!");
 			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
 			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 	
-		if (entity->entitytype == ENTITY_OBSTACLE)
+		else if (entity->entitytype == ENTITY_OBSTACLE)
 		{
 			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
 
@@ -2618,17 +2704,17 @@ void draw_game() {
 			}
 		}
 	
-		if (entity->entitytype == ENTITY_EFFECT) 
+		else if (entity->entitytype == ENTITY_EFFECT) 
 		{
 			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
-		if (entity->entitytype == ENTITY_PLAYER)
+		else if (entity->entitytype == ENTITY_PLAYER)
 		{
 			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
 		}
 
-		if (entity->entitytype == ENTITY_BOSS) {
+		else if (entity->entitytype == ENTITY_BOSS) {
 			switch(current_stage_level) {
 				case(10): draw_boss_stage_10(entity); break;
 				case(20): draw_boss_stage_20(entity); break;
@@ -2643,6 +2729,7 @@ void draw_game() {
 	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 		current_stage_level++;
 		initialize_new_stage(world, current_stage_level);
+		log("New stage!");
 	}
 
 	if (!(is_game_paused)) { particle_update(); }
@@ -2653,10 +2740,12 @@ void draw_game() {
 	game_over = number_of_shots_missed >= number_of_hearts;
 
 	if (game_over) {
+		log("you died!");
 		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
 		current_stage_level = 0;
 		number_of_shots_missed = 0;
 		clean_world();
+		world->world_background = COLOR_BLACK;
 		remove_all_particle_type(PFX_SNOW);
 		remove_all_particle_type(PFX_ASH);
 		remove_all_particle_type(PFX_LEAF);
@@ -2815,6 +2904,10 @@ int entry(int argc, char **argv) {
 	assert(effect_heart_sprite, "Failed loading 'res/textures/effect_heart.png'");
 
 	// Here we create the player object
+	mouse_entity = create_entity();
+	mouse_entity = setup_mouse_entity(mouse_entity);
+	selected_entity = create_entity();
+	selected_entity->position = v2(-9999, -9999);
 	
 	player = create_player();
 	
@@ -2828,7 +2921,7 @@ int entry(int argc, char **argv) {
 	os_update();
 	while (!window.should_close) {
 		reset_temporary_storage();
-
+		update_mouse_entity_position(mouse_entity);
 		local_persist Os_Window last_window;
 		if ((last_window.width != window.width || last_window.height != window.height || !game_image) && window.width > 0 && window.height > 0) {
 			if (bloom_map)   delete_image(bloom_map);
@@ -2877,7 +2970,8 @@ int entry(int argc, char **argv) {
 		//
 		// ---- BUTTONS THAT ONLY WORK IN DEBUG MODE ----
 		// 1-9 = Increment stage by that amount
-		// R   = Reload the shader file
+		// P   = Pause the game without a menu showing up
+
 		
 		if (is_key_just_pressed(KEY_TAB))
 		{
@@ -2916,6 +3010,13 @@ int entry(int argc, char **argv) {
 					initialize_new_stage(world, current_stage_level);
 					break;  // Exit the loop after processing one key
 				}
+			}
+			if (is_key_just_pressed('P')) {
+				is_game_paused = !is_game_paused;
+			}
+			if (is_key_just_pressed(KEY_CTRL)) {
+				consume_key_just_pressed(KEY_CTRL);
+				debug_entity_position = MOUSE_POSITION();
 			}
 		}
 	
@@ -3100,6 +3201,7 @@ int entry(int argc, char **argv) {
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("light sources: %i"), scene_cbuffer.light_count), font_height, v2(-window.width / 2, window.height / 2 - 200), v2(0.4, 0.4), COLOR_GREEN);
 				draw_timed_events();
+				draw_selected_entity_information();
 			}
 
 			draw_hearts();

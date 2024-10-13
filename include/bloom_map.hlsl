@@ -61,7 +61,9 @@ float4 get_light_contribution(PS_INPUT input) {
 
 float4 pixel_shader_extension(PS_INPUT input, float4 color) {
 	// We want to output everything above 1.0
-
+    if (input.type == 1) {
+        return color;
+    }
 	color = color + get_light_contribution(input);
 	
 	return float4(
