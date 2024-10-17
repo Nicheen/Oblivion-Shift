@@ -1140,6 +1140,19 @@ string effect_pretty_text(int type) {
 //                     UNCATEGORIZED FUNCTIONS
 // -----------------------------------------------------------------------
 
+string get_entity_type_text(int entity_type) {
+	switch(entity_type) {
+		case ENTITY_PLAYER: return STR("Player");
+		case ENTITY_BOSS:   return STR("Boss");
+		case ENTITY_PROJECTILE: return STR("Projectile");
+		case ENTITY_OBSTACLE: return STR("Obstacle");
+		case ENTITY_BEAM: return STR("Laser Beam");
+		case ENTITY_EFFECT: return STR("Status Effect");
+		default: return sprint(get_temporary_allocator(), STR("NOT DEFINED (%i)"), entity_type);
+	}
+
+}
+
 string get_timed_event_type_text(int timer_type) {
 	switch (timer_type) {
 		case TIMED_EVENT_COLOR_SWITCH: return STR("Color Switch");
@@ -1702,7 +1715,7 @@ void handle_player_attack(Entity* projectile) {
 		}
 	}
 	// Assuming your projectile has a velocity field, set the speed
-	projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
+	// projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
 	
 	charge_time_projectile = 0;  // Reset charge time after firing
 	
@@ -2476,6 +2489,45 @@ void draw_selected_entity_information() {
 	}
 }
 
+void draw_entity_effect(Entity* entity) {
+	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_projectile(Entity* entity) {
+	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_player(Entity* entity) {
+	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_boss(Entity* entity) {
+	switch(current_stage_level) 
+	{
+		case(10): draw_boss_stage_10(entity); break;
+		case(20): draw_boss_stage_20(entity); break;
+		case(30): draw_boss_stage_30(entity); break;
+		case(40): draw_boss_stage_40(entity); break;
+		default: {}; break;
+	}
+}
+
+void draw_entity_obstacle(Entity* entity) {
+	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+
+	switch(entity->obstacle_type) 
+	{
+		case(OBSTACLE_DROP):  draw_drop(entity); break;
+		case(OBSTACLE_BEAM):  draw_beam(entity); break;
+		case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
+		case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
+		case(OBSTACLE_BASE): {}; break;
+		default: log("%s obstacle type has not been handled correctly in draw_entity_obstacle()", entity->obstacle_type); break; 
+	}
+}
+
 // -----------------------------------------------------------------------
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
@@ -2666,62 +2718,22 @@ void initialize_new_stage(World* world, int current_stage_level) {
 
 void draw_game() {
 	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
-	scope_z_layer(layer_background)
-	{
-		draw_center_stage_text();
-	}
-		
+	
+	draw_center_stage_text();
+	
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
-
-		if (!entity->is_valid) continue;
-
-		if (entity->entitytype == ENTITY_EFFECT)
-		{
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_PROJECTILE)
-		{
-			log("Drawing projectile!");
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-	
-		else if (entity->entitytype == ENTITY_OBSTACLE)
-		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-
-			switch(entity->obstacle_type) 
-			{
-				case(OBSTACLE_DROP):  draw_drop(entity); break;
-				case(OBSTACLE_BEAM):  draw_beam(entity); break;
-				case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
-				case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
 		
-				default: { } break; 
-			}
-		}
-	
-		else if (entity->entitytype == ENTITY_EFFECT) 
-		{
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_PLAYER)
-		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_BOSS) {
-			switch(current_stage_level) {
-				case(10): draw_boss_stage_10(entity); break;
-				case(20): draw_boss_stage_20(entity); break;
-				case(30): draw_boss_stage_30(entity); break;
-				case(40): draw_boss_stage_40(entity); break;
-				default: break;
-			} break;
+		if (!entity->is_valid) continue;
+		
+		switch (entity->entitytype) {
+			case(ENTITY_PROJECTILE):  draw_entity_projectile(entity); break;
+			case(ENTITY_OBSTACLE):    draw_entity_obstacle(entity);   break;
+			case(ENTITY_EFFECT):      draw_entity_effect(entity);     break;
+			case(ENTITY_PLAYER):      draw_entity_player(entity);     break;
+			case(ENTITY_BOSS):        draw_entity_boss(entity);       break;
+			case(ENTITY_NIL):         {};                             break;
+			default: log("%s entity type has not been handled correctly in draw_game()", entity->entitytype); break;
 		}
 	}
 
@@ -2729,31 +2741,11 @@ void draw_game() {
 	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 		current_stage_level++;
 		initialize_new_stage(world, current_stage_level);
-		log("New stage!");
 	}
 
 	if (!(is_game_paused)) { particle_update(); }
 	
 	int number_of_particles = particle_render();
-	
-	// Check if game is over or not
-	game_over = number_of_shots_missed >= number_of_hearts;
-
-	if (game_over) {
-		log("you died!");
-		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
-		current_stage_level = 0;
-		number_of_shots_missed = 0;
-		clean_world();
-		world->world_background = COLOR_BLACK;
-		remove_all_particle_type(PFX_SNOW);
-		remove_all_particle_type(PFX_ASH);
-		remove_all_particle_type(PFX_LEAF);
-		remove_all_particle_type(PFX_RAIN);
-		remove_all_particle_type(PFX_WIND);
-		summon_world(SPAWN_RATE_ALL_OBSTACLES);
-		draw_text(font_light, sprint(get_temporary_allocator(), STR("GAME OVER\nSURVIVED %i STAGES"), current_stage_level), font_height, v2(0, 0), v2(1, 1), COLOR_WHITE);
-	}
 
 	draw_playable_area_borders();
 
@@ -2762,12 +2754,12 @@ void draw_game() {
 
 void update_game() {
 	entity_counter = 0;
-
+	
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
 		entity_counter++;
-
+		
 		// Update position from velocity if the game is not paused
 		if (!(is_game_paused)) entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
 
@@ -2853,6 +2845,24 @@ void update_game() {
 
 			default: break;
 		}
+	}
+
+	// Check if game is over or not
+	game_over = number_of_shots_missed >= number_of_hearts;
+
+	if (game_over) {
+		log("you died!");
+		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
+		current_stage_level = 0;
+		number_of_shots_missed = 0;
+		clean_world();
+		world->world_background = COLOR_BLACK;
+		remove_all_particle_type(PFX_SNOW);
+		remove_all_particle_type(PFX_ASH);
+		remove_all_particle_type(PFX_LEAF);
+		remove_all_particle_type(PFX_RAIN);
+		remove_all_particle_type(PFX_WIND);
+		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
 }
 
