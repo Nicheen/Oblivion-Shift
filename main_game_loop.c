@@ -236,12 +236,27 @@ TimedEvent* initialize_beam_event() {
 	return te;
 }
 
-TimedEvent* initialize_boss_movement_event() {
+TimedEvent* initialize_effect_event(float interval) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_EFFECT;
+    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
+    te->interval = interval; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = -1;
+
+    return te;
+}
+
+TimedEvent* initialize_boss_movement_event(float interval) {
 	TimedEvent* te = create_timedevent(world);
 
     te->type = TIMED_EVENT_BOSS_MOVEMENT;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 4.0f; // Interval for new random values
+    te->interval = interval; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -251,27 +266,12 @@ TimedEvent* initialize_boss_movement_event() {
     return te;
 }
 
-TimedEvent* initialize_boss_movement_event_stage_30() {
-	TimedEvent* te = create_timedevent(world);
-
-    te->type = TIMED_EVENT_BOSS_MOVEMENT;
-    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 3.0f; // Interval for new random values
-    te->interval_timer = 0.0f;
-    te->duration = 0.0f;
-    te->duration_timer = 0.0f;
-    te->progress = 0.0f;
-    te->counter = -1;
-
-    return te;
-}
-
-TimedEvent* initialize_boss_attack_event_stage_10() {
+TimedEvent* initialize_boss_attack_event(float interval) {
 	TimedEvent* te = create_timedevent(world);
 
     te->type = TIMED_EVENT_BOSS_ATTACK;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 2.0f; // Interval for new random values
+    te->interval = interval; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -281,27 +281,12 @@ TimedEvent* initialize_boss_attack_event_stage_10() {
     return te;
 }
 
-TimedEvent* initialize_boss_attack_event_20() {
+TimedEvent* initialize_boss_next_stage_event(float interval) {
 	TimedEvent* te = create_timedevent(world);
 
-    te->type = TIMED_EVENT_BOSS_ATTACK;
+    te->type = TIMED_EVENT_BOSS_NEXT_STAGE;
     te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 5.0f; // Interval for new random values
-    te->interval_timer = 0.0f;
-    te->duration = 0.0f;
-    te->duration_timer = 0.0f;
-    te->progress = 0.0f;
-    te->counter = -1;
-
-    return te;
-}
-
-TimedEvent* initialize_boss_attack_event_stage_30() {
-	TimedEvent* te = create_timedevent(world);
-
-    te->type = TIMED_EVENT_BOSS_ATTACK;
-    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 0.5f; // Interval for new random values
+    te->interval = interval; // Interval for new random values
     te->interval_timer = 0.0f;
     te->duration = 0.0f;
     te->duration_timer = 0.0f;
@@ -311,50 +296,6 @@ TimedEvent* initialize_boss_attack_event_stage_30() {
     return te;
 }
 
-TimedEvent* initialize_boss_second_stage_event_stage_30() {
-	TimedEvent* te = create_timedevent(world);
-
-    te->type = TIMED_EVENT_EFFECT;
-    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 30.0f; // Interval for new random values
-    te->interval_timer = 0.0f;
-    te->duration = 0.0f;
-    te->duration_timer = 0.0f;
-    te->progress = 0.0f;
-    te->counter = -1;
-
-    return te;
-}
-
-TimedEvent* initialize_boss_attack_event_stage_40() {
-	TimedEvent* te = create_timedevent(world);
-
-    te->type = TIMED_EVENT_BOSS_ATTACK;
-    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = 4.0f; // Interval for new random values
-    te->interval_timer = 0.0f;
-    te->duration = 0.0f;
-    te->duration_timer = 0.0f;
-    te->progress = 0.0f;
-    te->counter = -1;
-
-    return te;
-}
-
-TimedEvent* initialize_effect_event(float duration) {
-	TimedEvent* te = create_timedevent(world);
-
-    te->type = TIMED_EVENT_EFFECT;
-    te->worldtype = TIMED_EVENT_TYPE_ENTITY;
-    te->interval = duration; // Interval for new random values
-    te->interval_timer = 0.0f;
-    te->duration = 0.0f;
-    te->duration_timer = 0.0f;
-    te->progress = 0.0f;
-    te->counter = -1;
-
-    return te;
-}
 
 // -----------------------------------------------------------------------
 //                          PARTICLE FUNCTIONS
@@ -827,8 +768,8 @@ void setup_boss_stage_10(Entity* entity) {
 	entity->size = v2(50, 50);
 	entity->start_size = entity->size;
 
-	entity->timer = initialize_boss_movement_event();
-	entity->second_timer = initialize_boss_attack_event_stage_10();
+	entity->timer = initialize_boss_movement_event(4.0f);
+	entity->second_timer = initialize_boss_attack_event(4.0f);
 }
 
 void setup_boss_stage_20(Entity* entity) {
@@ -840,7 +781,7 @@ void setup_boss_stage_20(Entity* entity) {
 	entity->size = v2(80, 25);
 	entity->start_size = entity->size;
 
-	entity->timer = initialize_boss_movement_event(); // Boss movement event
+	entity->timer = initialize_boss_movement_event(4.0f); // Boss movement event
 
 	// Beam Functionality of the boss
 	Entity* beam = create_entity();
@@ -851,16 +792,16 @@ void setup_boss_stage_20(Entity* entity) {
 void setup_boss_stage_30(Entity* entity) {
     entity->entitytype = ENTITY_BOSS;
 
-    entity->first_stage_boss_stage_30 = true;
     entity->health = 10;
     entity->start_health = entity->health;
     entity->color = rgba(20, 50, 243, 255);
     entity->size = v2(50, 50);
     entity->start_size = entity->size;
     entity->position = v2(entity->position.x , 200);
-    entity->timer = initialize_boss_movement_event_stage_30();
-    entity->second_timer = initialize_boss_attack_event_stage_30();
-    entity->third_timer = initialize_boss_second_stage_event_stage_30();
+
+    entity->timer = initialize_boss_movement_event(3.0f);
+    entity->second_timer = initialize_boss_attack_event(0.5f);
+    entity->third_timer = initialize_boss_next_stage_event(30.0f);
 }
 
 void setup_boss_stage_40(Entity* entity) {
@@ -872,8 +813,8 @@ void setup_boss_stage_40(Entity* entity) {
 	entity->size = v2(50, 50);
 	entity->start_size = entity->size;
 
-	entity->timer = initialize_boss_movement_event();
-	entity->second_timer = initialize_boss_attack_event_stage_40();
+	entity->timer = initialize_boss_movement_event(4.0f);
+	entity->second_timer = initialize_boss_attack_event(4.0f);
 }
 
 void setup_block_obstacle(Entity* entity, int x, int y) {
@@ -1754,11 +1695,13 @@ Vector2 update_boss_stage_10_velocity(Vector2 velocity)
 
 void update_boss_stage_10(Entity* entity) 
 {
-	// Update the velocity based on the timer
+	// Movement timer
     if (timer_finished(entity->timer)) {
+		// Update the velocity
         entity->velocity = update_boss_stage_10_velocity(entity->velocity);
     }
 
+	// Attack timer
 	if (timer_finished(entity->second_timer)) {
 		Entity* p1 = create_entity();
 		Entity* p2 = create_entity();
@@ -1837,14 +1780,13 @@ void update_boss_stage_30(Entity* entity) {
         summon_projectile_drop_boss_stage_30(p1, v2_add(entity->position, v2(0, -entity->size.y)));
 
         // Om bossen är i andra fasen, förläng intervallet för nästa attack
-        if (!entity->first_stage_boss_stage_30) {
+        if (!entity->third_timer->counter) {
             entity->second_timer->interval = 3.0f;  // Exempel: Gör attacker långsammare i andra fasen
         }
     }
 
     // Om tredje timern (övergång till andra fasen) har löpt ut
     if (timer_finished(entity->third_timer)) {
-        entity->first_stage_boss_stage_30 = false;  // Övergång till andra fasen
         entity->velocity = v2(0, 0);  // Nollställ hastigheten
 
         // När bossen går in i andra fasen, justera attackintervallet
@@ -1862,7 +1804,7 @@ Vector2 update_boss_stage_30_position(Vector2 current_position) {
 
 Vector2 update_boss_stage_30_velocity(Vector2 velocity, Entity* entity) {
 	float velocity_amplitude = 100.0f;
-    if (entity->first_stage_boss_stage_30) {
+    if (entity->third_timer->counter) {
         // Sinusrörelse i första fasen
         float new_velocity_x = velocity_amplitude * (sin(now) + 0.5f * sin(2.0f * now)); 
         return v2(new_velocity_x, 0);  // Returnera x-hastighet för sinusrörelse
@@ -2134,7 +2076,7 @@ void draw_boss_stage_20(Entity* entity) {
 
 void draw_boss_stage_30(Entity* entity) {
     if (timer_finished(entity->timer)) {
-        if (entity->first_stage_boss_stage_30) {
+        if (entity->third_timer->counter) {
             // Endast uppdatera velocity och position i första fasen
             entity->velocity = update_boss_stage_30_velocity(entity->velocity, entity);
             entity->position = v2_add(entity->position, v2_mulf(entity->velocity, delta_t));
