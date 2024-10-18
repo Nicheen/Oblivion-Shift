@@ -1167,6 +1167,7 @@ bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, in
 }
 
 void clean_world() {
+	initialize_occupied_grid();
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Effect* effect = &world->effects[i];
 		Entity* entity = &world->entities[i];
