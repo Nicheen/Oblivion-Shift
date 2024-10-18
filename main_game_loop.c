@@ -5,7 +5,7 @@
 #include "include/IndependentFunctions.c"
 #include "include/ExtraDrawFunctions.c"
 #include "include/easings.c"
-#include "include/types.c"
+#include "include/Not_Types.c"
 #include "include/Structs.c"
 #include "include/particlesystem.c"
 
