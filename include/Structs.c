@@ -51,6 +51,7 @@ typedef struct Entity {
 	int health;
 	bool is_valid;
 	bool is_visible;
+	string text;
 	// --- Entity Type Below ---
 	// --- New Attributes for Block Obstacles ---
 	Vector2 matrix_position;  // Entity's position in the structure matrix

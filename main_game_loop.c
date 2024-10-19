@@ -296,6 +296,20 @@ TimedEvent* initialize_boss_next_stage_event(float interval) {
     return te;
 }
 
+TimedEvent* initialize_rolling_text_event(float interval) {
+	TimedEvent* te = create_timedevent(world);
+
+    te->type = TIMED_EVENT_ROLLING_TEXT;
+    te->worldtype = TIMED_EVENT_TYPE_WORLD;
+    te->interval = interval; // Interval for new random values
+    te->interval_timer = 0.0f;
+    te->duration = 0.0f;
+    te->duration_timer = 0.0f;
+    te->progress = 0.0f;
+    te->counter = 0;
+
+    return te;
+}
 
 // -----------------------------------------------------------------------
 //                          PARTICLE FUNCTIONS
@@ -1032,11 +1046,18 @@ void summon_world(float spawn_rate) {
 	}
 }
 
-void summon_tutorial_text(string text) {
+void summon_text(Vector4 color, Vector2 position, string text) {
 	Entity* entity = create_entity();
-	entity->type = ENTITY_ROLLING_TEXT;
-	entity->color = COLOR_WHITE;
-	entity->position = v2(0, 0);
+	entity->entitytype = ENTITY_ROLLING_TEXT;
+	entity->color = color;
+	entity->position = position;
+
+	float base_interval = 0.2f;
+	int text_length = text.count;
+
+	entity->timer = initialize_rolling_text_event(base_interval);
+
+	entity->text = text;
 }
 
 // -----------------------------------------------------------------------
@@ -2135,6 +2156,170 @@ void draw_boss_health_bar() {
 	}
 }
 
+void stage_tutorial() {
+	summon_text(COLOR_WHITE, v2(0, 0), STR("THIS IS A TEST!!!"));
+}
+
+
+void draw_timed_events() {
+    float y_offset = 0;  // Initialize y_offset to zero
+    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+        timed_event_info(&world->timedevents[i], i, &y_offset);
+    }
+}
+
+void draw_stage_timers() {
+    u32 font_height = 48;
+    float base_y = 100; // Base Y position for the green text
+	if (debug_mode) { base_y -= 200; }; // Shift the draw element if debug mode is enabled
+	float base_x = -365; // Base X position for the green text
+    float spacing = 25; // Spacing between texts
+
+	Vector4 current_timer_color = COLOR_GREEN;
+	Vector4 other_times_color = COLOR_WHITE;
+
+    // Draw the green text (current stage timer)
+	int minutes = (int)(stage_timer / 60) % 60;
+	int hours = (int)(stage_timer / 3600);
+	float seconds = stage_timer - (minutes * 60) - (hours * 3600);
+
+	// Format string based on time duration
+	string label;
+	if (hours > 0) {
+		// Show hours, minutes, seconds, and milliseconds
+		label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
+	} else {
+		// Show only minutes, seconds, and milliseconds
+		label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
+	}
+    
+    draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), current_timer_color);
+
+    // Limit the number of white texts to be drawn to a max of 5
+    int max_white_times = 5;
+    int times_to_draw = min(current_stage_level, max_white_times);
+
+    // Draw white times below the green text, newest at the top with fading effect
+    for (int i = 0; i < times_to_draw; i++) {
+        // Calculate transparency based on position: newest is opaque, older ones fade
+        float alpha = 1.0f - (i / (float)times_to_draw);
+
+        // Set fading white color with variable alpha
+        Vector4 faded_white = v4(other_times_color.r, other_times_color.g, other_times_color.b, alpha);
+
+        float time_in_seconds = stage_times[current_stage_level - i];
+
+		int minutes = (int)(time_in_seconds / 60) % 60;
+		int hours = (int)(time_in_seconds / 3600);
+		float seconds = time_in_seconds - (minutes * 60) - (hours * 3600);
+
+		// Format string based on time duration
+		string label;
+		if (hours > 0) {
+			// Show hours, minutes, seconds, and milliseconds
+			label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
+		} else {
+			// Show only minutes, seconds, and milliseconds
+			label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
+		}
+
+		draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
+    }
+}
+
+void draw_selected_entity_information() {
+	if (!(debug_entity_position.x == 0.0f) && !(debug_entity_position.y == 0.0f)) {
+		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
+			Entity* entity = &world->entities[i];
+			if (!entity->is_valid) continue;
+			if (entity == mouse_entity) continue;
+
+			if (circle_circle_collision_2(entity->position, debug_entity_position, entity->size, mouse_entity->size)) {
+				selected_entity = entity;
+				draw_text(
+					font_light,
+					sprint(get_temporary_allocator(),
+					STR(
+					"Position: %v2\nSize: %v2\nColor: %v4\n"
+					), 
+					selected_entity->position,
+					selected_entity->size,
+					selected_entity->color),
+					font_height,
+					selected_entity->position,
+					v2(0.4, 0.4),
+					COLOR_GREEN
+				);
+				break;
+			}
+		}
+	}
+}
+
+void draw_entity_effect(Entity* entity) {
+	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_projectile(Entity* entity) {
+	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_player(Entity* entity) {
+	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+}
+
+void draw_entity_rolling_text(Entity* entity) {
+	if (timer_finished(entity->timer)) {
+		if (entity->timer->counter > entity->text.count) {
+			entity->timer->counter = entity->text.count;
+		}
+	}
+
+	// Use string_view to get the substring to display
+    string temp = string_view(entity->text, 0, entity->timer->counter);
+
+    // Convert the string to a null-terminated C string for drawing
+    char* temp_cstr = temp_convert_to_null_terminated_string(temp);
+
+    // Draw the text on the screen
+    draw_text_in_frame(
+        font_light,
+        temp,
+        font_height,
+        entity->position,  // Adjust y-position based on y_offset
+        v2(1.0, 1.0),
+        entity->color,
+        current_draw_frame
+    );
+}
+
+void draw_entity_boss(Entity* entity) {
+	switch(current_stage_level) 
+	{
+		case(10): draw_boss_stage_10(entity); break;
+		case(20): draw_boss_stage_20(entity); break;
+		case(30): draw_boss_stage_30(entity); break;
+		case(40): draw_boss_stage_40(entity); break;
+		default: {}; break;
+	}
+}
+
+void draw_entity_obstacle(Entity* entity) {
+	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+
+	switch(entity->obstacle_type) 
+	{
+		case(OBSTACLE_DROP):  draw_drop(entity); break;
+		case(OBSTACLE_BEAM):  draw_beam(entity); break;
+		case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
+		case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
+		case(OBSTACLE_BASE): {}; break;
+		default: log("%s obstacle type has not been handled correctly in draw_entity_obstacle()", entity->obstacle_type); break; 
+	}
+}
+
 void draw_center_stage_text()
 {
 	// Create the label using sprint
@@ -2188,16 +2373,23 @@ void draw_starting_screen() {
 		Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
 		draw_text(font_bold, label, font_height, v2(-m.visual_size.x / 2, 75), v2(1, 1), COLOR_WHITE);
 
-		// Play Option
-		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Play")), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
-			is_main_menu_active = false;  // Close menu
-			is_game_paused = false;      
+		// Play Story Mode Option
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Story Mode")), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
 			is_starting_screen_active = false;
+			is_game_paused = false;      
+			is_game_running = true;
+			stage_tutorial();
+		}
+
+		// Play SpeedRunning Option
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Playground")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
+			is_starting_screen_active = false;
+			is_game_paused = false;      
 			is_game_running = true;
 		}
 
 		// Quit Option
-		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
 			window.should_close = true;  // Quit game
 		}
 	}
@@ -2347,140 +2539,6 @@ void draw_graphics_settings_menu() {
     }
 }
 
-void draw_timed_events() {
-    float y_offset = 0;  // Initialize y_offset to zero
-    for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-        timed_event_info(&world->timedevents[i], i, &y_offset);
-    }
-}
-
-void draw_stage_timers() {
-    u32 font_height = 48;
-    float base_y = 100; // Base Y position for the green text
-	if (debug_mode) { base_y -= 200; }; // Shift the draw element if debug mode is enabled
-	float base_x = -365; // Base X position for the green text
-    float spacing = 25; // Spacing between texts
-
-	Vector4 current_timer_color = COLOR_GREEN;
-	Vector4 other_times_color = COLOR_WHITE;
-
-    // Draw the green text (current stage timer)
-	int minutes = (int)(stage_timer / 60) % 60;
-	int hours = (int)(stage_timer / 3600);
-	float seconds = stage_timer - (minutes * 60) - (hours * 3600);
-
-	// Format string based on time duration
-	string label;
-	if (hours > 0) {
-		// Show hours, minutes, seconds, and milliseconds
-		label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
-	} else {
-		// Show only minutes, seconds, and milliseconds
-		label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
-	}
-    
-    draw_text(font_bold, label, font_height, v2(base_x, base_y), v2(1, 1), current_timer_color);
-
-    // Limit the number of white texts to be drawn to a max of 5
-    int max_white_times = 5;
-    int times_to_draw = min(current_stage_level, max_white_times);
-
-    // Draw white times below the green text, newest at the top with fading effect
-    for (int i = 0; i < times_to_draw; i++) {
-        // Calculate transparency based on position: newest is opaque, older ones fade
-        float alpha = 1.0f - (i / (float)times_to_draw);
-
-        // Set fading white color with variable alpha
-        Vector4 faded_white = v4(other_times_color.r, other_times_color.g, other_times_color.b, alpha);
-
-        float time_in_seconds = stage_times[current_stage_level - i];
-
-		int minutes = (int)(time_in_seconds / 60) % 60;
-		int hours = (int)(time_in_seconds / 3600);
-		float seconds = time_in_seconds - (minutes * 60) - (hours * 3600);
-
-		// Format string based on time duration
-		string label;
-		if (hours > 0) {
-			// Show hours, minutes, seconds, and milliseconds
-			label = sprint(get_temporary_allocator(), STR("%02d:%02d:%05.2f"), hours, minutes, seconds);
-		} else {
-			// Show only minutes, seconds, and milliseconds
-			label = sprint(get_temporary_allocator(), STR("%02d:%05.2f"), minutes, seconds);
-		}
-
-		draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
-    }
-}
-
-void draw_selected_entity_information() {
-	if (!(debug_entity_position.x == 0.0f) && !(debug_entity_position.y == 0.0f)) {
-		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-			Entity* entity = &world->entities[i];
-			if (!entity->is_valid) continue;
-			if (entity == mouse_entity) continue;
-
-			if (circle_circle_collision_2(entity->position, debug_entity_position, entity->size, mouse_entity->size)) {
-				selected_entity = entity;
-				draw_text(
-					font_light,
-					sprint(get_temporary_allocator(),
-					STR(
-					"Position: %v2\nSize: %v2\nColor: %v4\n"
-					), 
-					selected_entity->position,
-					selected_entity->size,
-					selected_entity->color),
-					font_height,
-					selected_entity->position,
-					v2(0.4, 0.4),
-					COLOR_GREEN
-				);
-				break;
-			}
-		}
-	}
-}
-
-void draw_entity_effect(Entity* entity) {
-	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-}
-
-void draw_entity_projectile(Entity* entity) {
-	draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-	draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-}
-
-void draw_entity_player(Entity* entity) {
-	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-}
-
-void draw_entity_boss(Entity* entity) {
-	switch(current_stage_level) 
-	{
-		case(10): draw_boss_stage_10(entity); break;
-		case(20): draw_boss_stage_20(entity); break;
-		case(30): draw_boss_stage_30(entity); break;
-		case(40): draw_boss_stage_40(entity); break;
-		default: {}; break;
-	}
-}
-
-void draw_entity_obstacle(Entity* entity) {
-	draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-
-	switch(entity->obstacle_type) 
-	{
-		case(OBSTACLE_DROP):  draw_drop(entity); break;
-		case(OBSTACLE_BEAM):  draw_beam(entity); break;
-		case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
-		case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
-		case(OBSTACLE_BASE): {}; break;
-		default: log("%s obstacle type has not been handled correctly in draw_entity_obstacle()", entity->obstacle_type); break; 
-	}
-}
-
 // -----------------------------------------------------------------------
 //                      STAGE HANDLER FUNCTION
 // -----------------------------------------------------------------------
@@ -2495,8 +2553,6 @@ void stage_0_to_9() {
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
-
-	summon_tutorial_text();
 }
 
 void stage_10_boss() {
@@ -2626,13 +2682,13 @@ void initialize_new_stage() {
 	
 	clean_world();
 	switch(current_stage_level) {
-		case( 0 ...  9): stage_0_to_9(); break;
+		case 0 ...  9: stage_0_to_9(); break;
 		case(10): stage_10_boss(); break;
-		case(11 ... 19): stage_11_to_19(); break;
+		case 11 ... 19: stage_11_to_19(); break;
 		case(20): stage_20_boss(); break;
-		case(21 ... 29): stage_21_to_29(); break;
+		case 21 ... 29: stage_21_to_29(); break;
 		case(30): stage_30_boss(); break;
-		case(31 ... 39): stage_31_to_39(); break;
+		case 31 ... 39: stage_31_to_39(); break;
 		case(40): stage_40_boss(); break;
 
 		default: summon_world(SPAWN_RATE_ALL_OBSTACLES); break;
@@ -2656,60 +2712,15 @@ void draw_game() {
 		Entity* entity = &world->entities[i];
 		
 		if (!entity->is_valid) continue;
-
-		if (entity->entitytype == ENTITY_EFFECT)
-		{
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_PROJECTILE)
-		{
-			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-	
-		else if (entity->entitytype == ENTITY_OBSTACLE)
-		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-
-			switch(entity->obstacle_type) 
-			{
-				case(OBSTACLE_DROP):  draw_drop(entity); break;
-				case(OBSTACLE_BEAM):  draw_beam(entity); break;
-				case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
-				case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
-		
-				default: { } break; 
-			}
-		}
-	
-		else if (entity->entitytype == ENTITY_EFFECT) 
-		{
-			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_PLAYER)
-		{
-			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
-		}
-
-		else if (entity->entitytype == ENTITY_BOSS) {
-			switch(current_stage_level) {
-				case(10): draw_boss_stage_10(entity); break;
-				case(20): draw_boss_stage_20(entity); break;
-				case(30): draw_boss_stage_30(entity); break;
-				case(40): draw_boss_stage_40(entity); break;
-				default: break;
-			} break;
 		
 		switch (entity->entitytype) {
-			case(ENTITY_PROJECTILE):  draw_entity_projectile(entity); break;
-			case(ENTITY_OBSTACLE):    draw_entity_obstacle(entity);   break;
-			case(ENTITY_EFFECT):      draw_entity_effect(entity);     break;
-			case(ENTITY_PLAYER):      draw_entity_player(entity);     break;
-			case(ENTITY_BOSS):        draw_entity_boss(entity);       break;
-			case(ENTITY_NIL):         {};                             break;
+			case(ENTITY_ROLLING_TEXT): draw_entity_rolling_text(entity); break;
+			case(ENTITY_PROJECTILE):   draw_entity_projectile(entity);   break;
+			case(ENTITY_OBSTACLE):     draw_entity_obstacle(entity);     break;
+			case(ENTITY_EFFECT):       draw_entity_effect(entity);       break;
+			case(ENTITY_PLAYER):       draw_entity_player(entity);       break;
+			case(ENTITY_BOSS):         draw_entity_boss(entity);         break;
+			case(ENTITY_NIL):          {};                               break;
 			default: log("%s entity type has not been handled correctly in draw_game()", entity->entitytype); break;
 		}
 	}
@@ -2718,9 +2729,8 @@ void draw_game() {
 	// TODO: Look at this
 	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 		current_stage_level++;
-		initialize_new_stage();
 		log("New stage!");
-		initialize_new_stage(world, current_stage_level);
+		initialize_new_stage();
 	}
 
 	if (!(is_game_paused)) { particle_update(); }
@@ -2903,6 +2913,7 @@ int entry(int argc, char **argv) {
 	
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	world->world_background = COLOR_BLACK;
+	summon_text(COLOR_WHITE, v2(-100, 50), STR("Welcome Player"));
 
 	// -----------------------------------------------------------------------
 	//                      WORLD TIMED TIMED_EVENTS ARE MADE HERE
