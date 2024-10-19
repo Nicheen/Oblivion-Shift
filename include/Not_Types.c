@@ -107,6 +107,7 @@ typedef enum EntityType {
 	ENTITY_EFFECT = 4,
 	ENTITY_BOSS = 5,
 	ENTITY_BEAM = 6,
+	ENTITY_ROLLING_TEXT = 7,
 
 	ENTITY_MAX,
 } EntityType;

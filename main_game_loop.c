@@ -214,7 +214,7 @@ TimedEvent* initialize_drop_event() {
 	te->type = TIMED_EVENT_DROP;
 	te->worldtype = TIMED_EVENT_TYPE_ENTITY;
 	te->interval = 10.0f;
-	te->interval_timer = get_random_float32_in_range(0, 0.7*te->interval);
+	te->interval_timer = get_random_float32_in_range(0, 0.5*te->interval);
 	te->duration = 10.0f;
 	te->progress = 0.0f;
 	te->counter = 0;
@@ -228,7 +228,7 @@ TimedEvent* initialize_beam_event() {
 	te->type = TIMED_EVENT_BEAM;
 	te->worldtype = TIMED_EVENT_TYPE_ENTITY;
 	te->interval = 10.0f;
-	te->interval_timer = get_random_float32_in_range(0, 0.7*te->interval);
+	te->interval_timer = get_random_float32_in_range(0, 0.5*te->interval);
 	te->duration = 2.0f;
 	te->progress = 0.0f;
 	te->counter = 0;
@@ -338,6 +338,13 @@ int number_of_certain_particle(ParticleKind kind) {
 		}
 	}
 	return n;
+}
+
+void remove_all_particles() {
+	for (int i = 0; i < ARRAY_COUNT(particles); i++) {
+		Particle* p = &particles[i];
+		particle_clear(p);
+	}
 }
 
 void remove_all_particle_type(ParticleKind kind) {
@@ -949,7 +956,6 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		entity->obstacle_type = OBSTACLE_DROP;
 		entity->color = v4(0.5, 0.7, 0.2, 1.0);
 		entity->timer = initialize_drop_event();
-		entity->child = create_entity();
 	} 
 
 	// Check for Hard Obstacle (next 20% chance, i.e., 0.2 < random_value <= 0.4)
@@ -1024,6 +1030,13 @@ void summon_world(float spawn_rate) {
 			}
 		}
 	}
+}
+
+void summon_tutorial_text(string text) {
+	Entity* entity = create_entity();
+	entity->type = ENTITY_ROLLING_TEXT;
+	entity->color = COLOR_WHITE;
+	entity->position = v2(0, 0);
 }
 
 // -----------------------------------------------------------------------
@@ -1167,6 +1180,7 @@ bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, in
 }
 
 void clean_world() {
+	remove_all_particles();
 	initialize_occupied_grid();
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Effect* effect = &world->effects[i];
@@ -1317,7 +1331,7 @@ bool boss_is_alive(World* world) {
 		Entity* entity = &world->entities[i];
 		if (!entity->is_valid) continue;
 
-		if (entity->entitytype == ENTITY_BOSS && entity->is_valid) {
+		if (entity->entitytype == ENTITY_BOSS) {
 			return true;
 		}
 	}
@@ -1352,12 +1366,13 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset) {
     }
 
     // Display the final constructed string at the current y_offset
-    draw_text(font_light, 
+    draw_text_in_frame(font_light, 
         temp, 
         font_height, 
         v2(-window.width / 2, window.height / 2 - 225 - *y_offset),  // Adjust y-position based on y_offset
         v2(0.4, 0.4), 
-        COLOR_GREEN
+        COLOR_GREEN,
+		current_draw_frame
     );
 
     // Increase the y_offset for the next valid TimedEvent
@@ -1519,7 +1534,7 @@ void update_player_position(Player* player) {
     }
 
     // Check for left movement (A key or left arrow)
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
+    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -world->playable_width.x / 2 + player->entity->size.x / 2) {
         input_axis.x -= 1.0f;
         moving = true;
 
@@ -1533,7 +1548,7 @@ void update_player_position(Player* player) {
     }
 
     // Check for right movement (D key or right arrow)
-    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
+    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < world->playable_width.y / 2 - player->entity->size.x / 2) {
         input_axis.x += 1.0f;
         moving = true;
 
@@ -1563,14 +1578,14 @@ void update_player_position(Player* player) {
         if (previous_input == 0) {
             // Dashing to the left
             player->entity->position.x -= dash_distance;
-            if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
-                player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;  // Prevent out of bounds
+            if (player->entity->position.x < -world->playable_width.x / 2 + player->entity->size.x / 2) {
+                player->entity->position.x = -world->playable_width.x / 2 + player->entity->size.x / 2;  // Prevent out of bounds
             }
         } else if (previous_input == 1) {
             // Dashing to the right
             player->entity->position.x += dash_distance;
-            if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
-                player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;  // Prevent out of bounds
+            if (player->entity->position.x > world->playable_width.y / 2 - player->entity->size.x / 2) {
+                player->entity->position.x = world->playable_width.y / 2 - player->entity->size.x / 2;  // Prevent out of bounds
             }
         }
         can_dash = false;  // Start cooldown
@@ -1608,8 +1623,8 @@ void update_player_position(Player* player) {
 
 void limit_player_position(Player* player){
     // Begränsa spelarens position inom spelområdet
-    if (player->entity->position.x > PLAYABLE_WIDTH / 2 - player->entity->size.x / 2) {
-        player->entity->position.x = PLAYABLE_WIDTH / 2 - player->entity->size.x / 2;
+    if (player->entity->position.x > world->playable_width.y / 2 - player->entity->size.x / 2) {
+        player->entity->position.x = world->playable_width.y / 2 - player->entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
         if (fabs(player->entity->velocity.x) > player->max_bounce) {
@@ -1619,8 +1634,8 @@ void limit_player_position(Player* player){
         }
     }
 
-    if (player->entity->position.x < -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2) {
-        player->entity->position.x = -PLAYABLE_WIDTH / 2 + player->entity->size.x / 2;
+    if (player->entity->position.x < -world->playable_width.x / 2 + player->entity->size.x / 2) {
+        player->entity->position.x = -world->playable_width.x / 2 + player->entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
         if (fabs(player->entity->velocity.x) > player->max_bounce) {
@@ -1673,14 +1688,14 @@ void update_boss_position_if_over_limit(Entity* boss) {
     boss->position.x += boss->velocity.x * delta_t;  // Uppdatera x-position
 
     // Kontrollera gränserna och byta riktning
-    if (boss->position.x < -PLAYABLE_WIDTH / 2 + boss->size.x / 2) {
+    if (boss->position.x < -world->playable_width.x / 2 + boss->size.x / 2) {
         // Om bossen når vänster gräns, byt riktning
         boss->velocity.x = fabs(boss->velocity.x);  // Sätt hastigheten positiv (höger)
-        boss->position.x = -PLAYABLE_WIDTH / 2 + boss->size.x / 2;  // Se till att bossen stannar inom gränsen
-    } else if (boss->position.x > PLAYABLE_WIDTH / 2 - boss->size.x / 2) {
+        boss->position.x = -world->playable_width.x / 2 + boss->size.x / 2;  // Se till att bossen stannar inom gränsen
+    } else if (boss->position.x > world->playable_width.y / 2 - boss->size.x / 2) {
         // Om bossen når höger gräns, byt riktning
         boss->velocity.x = -fabs(boss->velocity.x);  // Sätt hastigheten negativ (vänster)
-        boss->position.x = PLAYABLE_WIDTH / 2 - boss->size.x / 2;  // Se till att bossen stannar inom gränsen
+        boss->position.x = world->playable_width.y / 2 - boss->size.x / 2;  // Se till att bossen stannar inom gränsen
     }
 }
 
@@ -1716,7 +1731,7 @@ void update_boss_stage_10(Entity* entity)
 Vector2 update_boss_stage_20_position(Vector2 current_position) 
 {
     // Definiera teleportationsområden eller slumpa fram en ny position
-    float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);  // Slumpa x-position inom skärmens bredd
+    float new_x = get_random_float32_in_range(-world->playable_width.x/2 + 40.0f, world->playable_width.y/2 - 40.0f);  // Slumpa x-position inom skärmens bredd
     float new_y = get_random_float32_in_range(-(window.height/2) + 200, (window.height/2) - 100);     // Slumpa y-position inom övre halvan av skärmen
 
     Vector2 new_position = v2(new_x, new_y);  // Skapa en ny position med slumpmässiga värden
@@ -1797,7 +1812,7 @@ void update_boss_stage_30(Entity* entity) {
 }
 
 Vector2 update_boss_stage_30_position(Vector2 current_position) {
-	float new_x = get_random_float32_in_range(-PLAYABLE_WIDTH/2 + 40.0f, PLAYABLE_WIDTH/2 - 40.0f);
+	float new_x = get_random_float32_in_range(-world->playable_width.x/2 + 40.0f, world->playable_width.y/2 - 40.0f);
 	Vector2 new_position = v2(new_x, 200); 
 
     return new_position;
@@ -1869,11 +1884,11 @@ void update_obstacle_drop(Entity* entity) {
 	int x = entity->grid_position.x;
 	int y = entity->grid_position.y;
 	if (check_clearance_below(world->obstacle_list, obstacle_count, x, y)) {
+		if (entity->child == NULL) entity->child = create_entity();
 		if (timer_finished(entity->timer)) {
 			entity->child->is_visible = true;
 			if (entity->timer->duration_timer <= 0.5f) 
 			{
-				if (entity->child == NULL) entity->child = create_entity();
 				summon_projectile_drop(entity->child, entity);
 			}
 			if (circle_rect_collision(entity->child, player->entity)) {
@@ -1911,7 +1926,9 @@ void draw_obstacle_block(Entity* entity) {
 }
 
 void draw_drop(Entity* entity) {
-	draw_centered_in_frame_circle(entity->child->position, entity->child->size, entity->child->color, current_draw_frame);					
+	if (entity->child != NULL) {
+		draw_centered_in_frame_circle(entity->child->position, entity->child->size, entity->child->color, current_draw_frame);					
+	}
 }
 
 void draw_beam(Entity* entity) {
@@ -1937,8 +1954,8 @@ void draw_beam(Entity* entity) {
 }
 
 void draw_playable_area_borders() {
-	draw_line_in_frame(v2(-PLAYABLE_WIDTH / 2, -window.height / 2), v2(-PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
-	draw_line_in_frame(v2(PLAYABLE_WIDTH / 2, -window.height / 2), v2(PLAYABLE_WIDTH / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
+	draw_line_in_frame(v2(-world->playable_width.x / 2, -window.height / 2), v2(-world->playable_width.x / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
+	draw_line_in_frame(v2(world->playable_width.y / 2, -window.height / 2), v2(world->playable_width.y / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
 }
 
 void draw_death_borders(TimedEvent* timedevent) {
@@ -1983,7 +2000,7 @@ void draw_hearts() {
 
     for (int i = 0; i < hearts_to_draw; i++) {
         // Calculate the initial heart position
-        Vector2 heart_position = v2(window.width / 2 - (heart_size + heart_padding) * number_of_hearts, heart_size - window.height / 2);
+        Vector2 heart_position = v2(0, 0);
         
         // Adjust the position for each heart
         heart_position = v2_add(heart_position, v2((heart_size + heart_padding) * i, 0));
@@ -2139,7 +2156,7 @@ void draw_effect_ui() {
 		if (effect->timer == NULL || !(effect->timer->is_valid)) {
             continue; // Skip this effect if the timer is not initialized
         }
-			
+		log("There is an effect!");
 		Vector2 effect_position = v2(window.width / 2 - 150, window.height / 2 - 30 - y_diff);
 
 		Gfx_Text_Metrics m = measure_text(font_bold, effect_pretty_text(effect->effect_type), font_height, v2(0.4, 0.4));
@@ -2179,15 +2196,8 @@ void draw_starting_screen() {
 			is_game_running = true;
 		}
 
-		// Settings Option
-		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Settings")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
-			is_main_menu_active = false;      // Close main menu
-			is_settings_menu_active = true;   // Open settings menu
-			is_starting_screen_active = false;
-		}
-
 		// Quit Option
-		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -100), v2(button_size, 50), true)) {
+		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Quit")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
 			window.should_close = true;  // Quit game
 		}
 	}
@@ -2485,19 +2495,22 @@ void stage_0_to_9() {
     int n_existing_particles = number_of_certain_particle(PFX_SNOW);
 	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
+
+	summon_tutorial_text();
 }
 
 void stage_10_boss() {
-	//float r = 0.0f;
-    //float g = 0.0f;
-    //float b = (float)current_stage_level / 20.0f;
-	//world->world_background = v4(r, g, b, 1.0f);
+	float r = 0.0f;
+	float g = 0.0f;
+	float b = (float)current_stage_level / 20.0f;
+	world->world_background = v4(r, g, b, 1.0f);
+	
 	Entity* boss = create_entity();
 	setup_boss_stage_10(boss);
 
-    //int n_existing_particles = number_of_certain_particle(PFX_SNOW);
-	//int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
-    //particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
+	int n_existing_particles = number_of_certain_particle(PFX_SNOW);
+	int particles_to_spawn = calculate_particles_to_spawn((float)current_stage_level / 10.0f, n_existing_particles, 1000.0f);
+	particle_emit(v2(0, 0), v4(0, 0, 0, 0), particles_to_spawn, PFX_SNOW);
 }
 
 void stage_11_to_19() {
@@ -2607,47 +2620,22 @@ void stage_51_to_59() {
 
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
-void initialize_new_stage(World* world, int current_stage_level) {
+void initialize_new_stage() {
 	
 	stage_times[current_stage_level] = stage_timer;
 	
 	clean_world();
+	switch(current_stage_level) {
+		case( 0 ...  9): stage_0_to_9(); break;
+		case(10): stage_10_boss(); break;
+		case(11 ... 19): stage_11_to_19(); break;
+		case(20): stage_20_boss(); break;
+		case(21 ... 29): stage_21_to_29(); break;
+		case(30): stage_30_boss(); break;
+		case(31 ... 39): stage_31_to_39(); break;
+		case(40): stage_40_boss(); break;
 
-	if (current_stage_level <= 9) 
-	{
-		stage_0_to_9();
-	} 
-	else if (current_stage_level == 10) 
-	{
-		stage_10_boss();
-	} 
-	else if (current_stage_level <= 19) 
-	{
-		stage_11_to_19();
-	} 
-	else if (current_stage_level == 20) 
-	{
-		stage_20_boss();
-	}
-	else if (current_stage_level <= 29) 
-	{
-		stage_21_to_29();
-	} 
-	else if (current_stage_level == 30) 
-	{
-		stage_30_boss();
-	}
-	else if (current_stage_level <= 39) 
-	{
-		stage_31_to_39();
-	} 
-	else if (current_stage_level == 40) 
-	{
-		stage_40_boss();
-	}
-	else 
-	{
-		summon_world(SPAWN_RATE_ALL_OBSTACLES);
+		default: summon_world(SPAWN_RATE_ALL_OBSTACLES); break;
 	}
 }
 
@@ -2668,6 +2656,52 @@ void draw_game() {
 		Entity* entity = &world->entities[i];
 		
 		if (!entity->is_valid) continue;
+
+		if (entity->entitytype == ENTITY_EFFECT)
+		{
+			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+		}
+
+		else if (entity->entitytype == ENTITY_PROJECTILE)
+		{
+			draw_centered_in_frame_circle(entity->position, v2_add(entity->size, v2(2, 2)), COLOR_BLACK, current_draw_frame);
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+		}
+	
+		else if (entity->entitytype == ENTITY_OBSTACLE)
+		{
+			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+
+			switch(entity->obstacle_type) 
+			{
+				case(OBSTACLE_DROP):  draw_drop(entity); break;
+				case(OBSTACLE_BEAM):  draw_beam(entity); break;
+				case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
+				case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
+		
+				default: { } break; 
+			}
+		}
+	
+		else if (entity->entitytype == ENTITY_EFFECT) 
+		{
+			draw_centered_in_frame_circle(entity->position, entity->size, entity->color, current_draw_frame);
+		}
+
+		else if (entity->entitytype == ENTITY_PLAYER)
+		{
+			draw_centered_in_frame_rect(entity->position, entity->size, entity->color, current_draw_frame);
+		}
+
+		else if (entity->entitytype == ENTITY_BOSS) {
+			switch(current_stage_level) {
+				case(10): draw_boss_stage_10(entity); break;
+				case(20): draw_boss_stage_20(entity); break;
+				case(30): draw_boss_stage_30(entity); break;
+				case(40): draw_boss_stage_40(entity); break;
+				default: break;
+			} break;
 		
 		switch (entity->entitytype) {
 			case(ENTITY_PROJECTILE):  draw_entity_projectile(entity); break;
@@ -2681,8 +2715,11 @@ void draw_game() {
 	}
 
 	// When a stage is cleared this is runned
+	// TODO: Look at this
 	if (obstacle_count - number_of_block_obstacles <= 0 && !(boss_is_alive(world))) {
 		current_stage_level++;
+		initialize_new_stage();
+		log("New stage!");
 		initialize_new_stage(world, current_stage_level);
 	}
 
@@ -2746,7 +2783,7 @@ void update_game() {
 				}
 
 				// Check projectile bounds
-				if (entity->position.x <= -PLAYABLE_WIDTH / 2 || entity->position.x >= PLAYABLE_WIDTH / 2) {
+				if (entity->position.x <= -world->playable_width.x / 2 || entity->position.x >= world->playable_width.y / 2) {
 					projectile_bounce_world(entity);
 					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
 				}
@@ -2897,6 +2934,9 @@ int entry(int argc, char **argv) {
 		// Mouse Positions
 		mouse_position = MOUSE_POSITION();
 
+		// Change this to change the white lines that bound the players movements
+		world->playable_width = v2(400, 400); 
+		
 		// Camera Stuff
 		camera_trauma -= delta_t;
 		camera_trauma = fmaxf(camera_trauma, 0);
@@ -2960,7 +3000,7 @@ int entry(int argc, char **argv) {
 					consume_key_just_pressed(key);
 					int level_increment = key - '0';  // Convert char to the corresponding integer
 					current_stage_level += level_increment;
-					initialize_new_stage(world, current_stage_level);
+					initialize_new_stage();
 					break;  // Exit the loop after processing one key
 				}
 			}
@@ -3048,8 +3088,8 @@ int entry(int argc, char **argv) {
 			create_rectangular_light_source(v2(0, -window.height / 2), barrier_color, v2(window.width, 40 + 10*(sin(now) + 3)), 0, v2(1, 0), 0.5f, &scene_cbuffer);
 			create_rectangular_light_source(v2(0,  window.height / 2), barrier_color, v2(window.width, 40 + 10*(sin(now) + 3)), 0, v2(1, 0), 0.5f, &scene_cbuffer);
 			
-			create_rectangular_light_source(v2(-PLAYABLE_WIDTH / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
-			create_rectangular_light_source(v2( PLAYABLE_WIDTH / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
+			create_rectangular_light_source(v2(-world->playable_width.x / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
+			create_rectangular_light_source(v2( world->playable_width.y / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
 
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				Entity* entity = &world->entities[i];
@@ -3098,7 +3138,6 @@ int entry(int argc, char **argv) {
 		// Draw game things to offscreen Draw_Frame
 		draw_game();
 		
-
 		// Set the shader & cbuffer before the render call
 		offscreen_draw_frame.shader_extension = light_shader;
 		offscreen_draw_frame.cbuffer = &scene_cbuffer;
@@ -3143,10 +3182,11 @@ int entry(int argc, char **argv) {
 		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 		
 		{ //  ---- DRAW UI ----
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("Stage: %i"), current_stage_level), font_height, v2(-window.width / 2, window.height / 2 - 25), v2(0.4, 0.4), COLOR_GREEN);
+			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
+				
 			if (debug_mode) {
 				draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
-				draw_text(font_light, sprint(get_temporary_allocator(), STR("Stage: %i"), current_stage_level), font_height, v2(-window.width / 2, window.height / 2 - 25), v2(0.4, 0.4), COLOR_GREEN);
-				draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), entity_counter), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("destroyed: %i"), number_of_destroyed_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 125), v2(0.4, 0.4), COLOR_GREEN);

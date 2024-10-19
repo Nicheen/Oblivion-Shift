@@ -44,7 +44,6 @@ Gfx_Shader_Extension load_shader(string file_path, int cbuffer_size) {
     return shader;
 }
 
-
 Draw_Quad ndc_quad_to_screen_quad(Draw_Quad ndc_quad) {
 
 	// NOTE: we're assuming these are the screen space matricies.

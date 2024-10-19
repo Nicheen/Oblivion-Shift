@@ -102,5 +102,6 @@ typedef struct World {
     TimedEvent timedevents[MAX_ENTITY_COUNT];
 	Effect effects[MAX_ENTITY_COUNT];
 
+	Vector2 playable_width;
 	Vector4 world_background;
 } World;
