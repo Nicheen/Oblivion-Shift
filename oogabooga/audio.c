@@ -1537,9 +1537,9 @@ play_one_audio_clip_with_config(string path, Audio_Playback_Config config) {
 	}
 }
 void inline
-play_one_audio_clip(string path) {
+play_one_audio_clip(string path, float volume) {
 	Audio_Playback_Config config = {0};
-	config.volume = 1.0;
+	config.volume = volume;
 	config.playback_speed = 1.0;
 	play_one_audio_clip_with_config(path, config);
 }

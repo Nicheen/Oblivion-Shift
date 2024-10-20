@@ -51,6 +51,8 @@ Gfx_Image* effect_heart_sprite = NULL;
 bool debug_mode = false;
 bool game_over = false;
 bool use_shaders = true;  // Global variable to control shader usage
+bool window_fullscreen = true;
+Vector2 window_resolution;
 
 //
 // ---- Starting Screen 
@@ -1333,16 +1335,16 @@ void play_random_blop_sound() {
 
     switch (random_sound) {
         case 0:
-			play_one_audio_clip(STR("res/sound_effects/blop1.wav"));
+			play_one_audio_clip(STR("res/sound_effects/blop1.wav"), 1.0);
             break;
         case 1:
-            play_one_audio_clip(STR("res/sound_effects/blop2.wav"));
+            play_one_audio_clip(STR("res/sound_effects/blop2.wav"), 1.0);
             break;
         case 2:
-            play_one_audio_clip(STR("res/sound_effects/blop3.wav"));
+            play_one_audio_clip(STR("res/sound_effects/blop3.wav"), 1.0);
             break;
         case 3:
-            play_one_audio_clip(STR("res/sound_effects/blop4.wav"));
+            play_one_audio_clip(STR("res/sound_effects/blop4.wav"), 1.0);
             break;
     }
 }
@@ -1387,13 +1389,12 @@ void timed_event_info(TimedEvent* te, int index, float* y_offset) {
     }
 
     // Display the final constructed string at the current y_offset
-    draw_text_in_frame(font_light, 
+    draw_text(font_light, 
         temp, 
         font_height, 
         v2(-window.width / 2, window.height / 2 - 225 - *y_offset),  // Adjust y-position based on y_offset
         v2(0.4, 0.4), 
-        COLOR_GREEN,
-		current_draw_frame
+        COLOR_GREEN
     );
 
     // Increase the y_offset for the next valid TimedEvent
@@ -1494,7 +1495,7 @@ void handle_projectile_collision(Entity* projectile, Entity* obstacle) {
 	if (obstacle->obstacle_type == OBSTACLE_BLOCK) 
 	{
 		projectile_bounce(projectile, obstacle);
-		play_one_audio_clip(STR("res/sound_effects/thud1.wav"));
+		play_one_audio_clip(STR("res/sound_effects/thud1.wav"), 1.0);
 	} 
 	else
 	{
@@ -1740,6 +1741,7 @@ void update_boss_stage_10(Entity* entity)
 
 	// Attack timer
 	if (timer_finished(entity->second_timer)) {
+		entity->is_visible = false;
 		Entity* p1 = create_entity();
 		Entity* p2 = create_entity();
 		summon_icicle(p1, v2_add(entity->position, v2(entity->size.x, 0)));
@@ -1957,7 +1959,10 @@ void draw_beam(Entity* entity) {
         float max_beam_size = 5.0f;
 
         if (timer_finished(entity->child->timer)) {
-			if (!entity->child->is_visible) camera_shake(0.2);
+			if (!entity->child->is_visible) {
+				//play_one_audio_clip(STR("res/sound_effects/laser.wav"), 0.5);
+				camera_shake(0.2);
+			}
 			entity->child->is_visible = true;
 
             // Draw the real beam (red), centered on the entity
@@ -2013,7 +2018,7 @@ void draw_death_borders(TimedEvent* timedevent) {
 }
 
 void draw_hearts() {
-    int heart_size = 50;
+    int heart_size = 100;
     int heart_padding = 0;
     
     // Calculate the number of hearts to draw
@@ -2021,13 +2026,13 @@ void draw_hearts() {
 
     for (int i = 0; i < hearts_to_draw; i++) {
         // Calculate the initial heart position
-        Vector2 heart_position = v2(0, 0);
+        Vector2 heart_position = v2(-heart_size*1.5, -400);
         
         // Adjust the position for each heart
         heart_position = v2_add(heart_position, v2((heart_size + heart_padding) * i, 0));
         
         // Draw the heart sprite at the calculated position
-        draw_image(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1));
+        draw_image_in_frame(heart_sprite, heart_position, v2(heart_size, heart_size), v4(1, 1, 1, 1), current_draw_frame);
     }
 }
 
@@ -2157,9 +2162,8 @@ void draw_boss_health_bar() {
 }
 
 void stage_tutorial() {
-	summon_text(COLOR_WHITE, v2(0, 0), STR("THIS IS A TEST!!!"));
+	summon_text(COLOR_WHITE, v2(0, 0), STR("WELCOME\nTRY NOT TO DIE!"));
 }
-
 
 void draw_timed_events() {
     float y_offset = 0;  // Initialize y_offset to zero
@@ -2415,14 +2419,14 @@ void draw_main_menu() {
 		
 		// Play Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Play")), v2(-button_size / 2, 0), v2(button_size, 50), true)) {
-			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
+			play_one_audio_clip(STR("res/sound_effects/Button_Click.wav"), 0.7);
 			is_main_menu_active = false;  // Close menu
         	is_game_paused = false;       // Resume game
 		}
 
 		// Settings Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Settings")), v2(-button_size / 2, -50), v2(button_size, 50), true)) {
-			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
+			play_one_audio_clip(STR("res/sound_effects/Button_Click.wav"), 0.7);
 			is_main_menu_active = false;      // Close main menu
 			is_settings_menu_active = true;   // Open settings menu
 		}
@@ -2454,19 +2458,19 @@ void draw_settings_menu() {
 
 		// Sound Settings Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Sound")), v2(-button_size.x / 2, y), button_size, true)) {
-			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
+			play_one_audio_clip(STR("res/sound_effects/Button_Click.wav"), 0.7);
 		}
 		y -= button_size.y;
 		// Graphics Settings Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Graphics")), v2(-button_size.x / 2, y), button_size, true)) {
 			is_settings_menu_active = false;
 			is_graphics_settings_active = true;
-			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
+			play_one_audio_clip(STR("res/sound_effects/Button_Click.wav"), 0.7);
 		}
 		y -= button_size.y;
 		// Controls Settings Option
 		if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Controls")), v2(-button_size.x / 2, y), button_size, true)) {
-			//play_one_audio_clip(sprint(get_temporary_allocator(), STR("res/sound_effects/Button_Click.wav")));
+			play_one_audio_clip(STR("res/sound_effects/Button_Click.wav"), 0.7);
 		}
 		y -= button_size.y;
 		// Back Button to return to Main Menu
@@ -2509,24 +2513,17 @@ void draw_graphics_settings_menu() {
         if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Resolution: 1920x1080")), 
                         v2(-button_size.x / 2, y), button_size, true)) {
             // Dummy function - doesn't actually change resolution
+			if (!window_fullscreen) {
+				// Go through all of the available resolution settings.
+			}
         }
         y -= 60;
 
         // Dummy Fullscreen Toggle
-        static bool dummy_fullscreen = false;
-        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Fullscreen: %s"), dummy_fullscreen ? "ON" : "OFF"), 
+        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("Fullscreen: %s"), window_fullscreen ? "ON" : "OFF"), 
                         v2(-button_size.x / 2, y), button_size, true)) {
-            dummy_fullscreen = !dummy_fullscreen;
-            // Dummy function - doesn't actually toggle fullscreen
-        }
-        y -= 60;
-
-        // Dummy VSync Toggle
-        static bool dummy_vsync = true;
-        if (draw_button(font_light, font_height, sprint(get_temporary_allocator(), STR("VSync: %s"), dummy_vsync ? "ON" : "OFF"), 
-                        v2(-button_size.x / 2, y), button_size, true)) {
-            dummy_vsync = !dummy_vsync;
-            // Dummy function - doesn't actually toggle VSync
+            window_fullscreen = !window_fullscreen;
+			window.fullscreen = window_fullscreen;
         }
         y -= 60;
 
@@ -2673,7 +2670,6 @@ void stage_51_to_59() {
     particle_emit(v2(0, 0), v4(0, 0, 0, 0), 1000 - n_wind_particles, PFX_WIND); // Anpassa antalet
 }
 
-
 // !!!! Here we do all the stage stuff, not in the game loop !!!!
 // Level specific stuff happens here
 void initialize_new_stage() {
@@ -2705,6 +2701,8 @@ void initialize_new_stage() {
 
 void draw_game() {
 	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
+
+	draw_hearts();
 	
 	draw_center_stage_text();
 	
@@ -2795,13 +2793,13 @@ void update_game() {
 				// Check projectile bounds
 				if (entity->position.x <= -world->playable_width.x / 2 || entity->position.x >= world->playable_width.y / 2) {
 					projectile_bounce_world(entity);
-					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"));
+					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"), 1.0);
 				}
 
 				if (entity->position.y <= -window.height / 2 || entity->position.y >= window.height / 2) {
 					number_of_shots_missed++;
 					camera_shake(0.3);
-					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"));
+					play_one_audio_clip(STR("res/sound_effects/Impact_021.wav"), 0.6);
 					destroy_entity(entity);
 				}
 			} break;
@@ -2842,7 +2840,7 @@ void update_game() {
 
 	if (game_over) {
 		log("you died!");
-		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"));
+		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"), 0.5);
 		current_stage_level = 0;
 		number_of_shots_missed = 0;
 		clean_world();
@@ -2857,13 +2855,14 @@ void update_game() {
 }
 
 int entry(int argc, char **argv) {
+	window_resolution = v2(1920, 1080);
 	window.title = STR("Noel & Gustav - Pong Clone");
-	window.point_width = 600;
-	window.point_height = 500; 
-	window.x = 200;
-	window.y = 200;
+	window.pixel_width = window_resolution.x;
+	window.pixel_height = window_resolution.y; 
+	window.x = 0;
+	window.y = 0;
 	window.clear_color = COLOR_BLACK; // Background color
-	//window.fullscreen = true;
+	window.fullscreen = window_fullscreen;
 
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
@@ -3052,17 +3051,17 @@ int entry(int argc, char **argv) {
 				static bool has_played_sound_2 = false;
 
 				if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
-						play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"));
+						play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"), 1.0);
 						has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 
 				if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"));
+						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
 						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 
 				if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"));
+						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
 						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 				
@@ -3207,8 +3206,6 @@ int entry(int argc, char **argv) {
 				draw_timed_events();
 				draw_selected_entity_information();
 			}
-
-			draw_hearts();
 
 			draw_boss_health_bar();
 
