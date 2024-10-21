@@ -1134,6 +1134,7 @@ string get_timed_event_type_text(int timer_type) {
 	switch (timer_type) {
 		case TIMED_EVENT_COLOR_SWITCH: return STR("Color Switch");
 		case TIMED_EVENT_BEAM: return STR("Laser Beam");
+		case TIMED_EVENT_ROLLING_TEXT: return STR("Rolling Text");
 		case TIMED_EVENT_BOSS_MOVEMENT: return STR("Boss Movement");
 		case TIMED_EVENT_BOSS_ATTACK: return STR("Boss Attack");
 		case TIMED_EVENT_EFFECT: return STR("Effect");
@@ -1203,19 +1204,12 @@ bool check_clearance_below(ObstacleTuple obstacle_list[], int obstacle_count, in
 }
 
 void clean_world() {
-	remove_all_particles();
 	initialize_occupied_grid();
 	for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 		Effect* effect = &world->effects[i];
 		Entity* entity = &world->entities[i];
 		TimedEvent* timer = &world->timedevents[i];
-		if (entity->entitytype == ENTITY_PROJECTILE && entity->is_valid) {
-			destroy_entity(entity);
-		}
-		if (entity->entitytype == ENTITY_OBSTACLE && entity->is_valid) {
-			destroy_entity(entity);
-		}
-		if (entity->entitytype == ENTITY_BOSS && entity->is_valid) {
+		if (!(entity->entitytype == ENTITY_PLAYER) && entity->is_valid) {
 			destroy_entity(entity);
 		}
 		if (!(timer->worldtype == TIMED_EVENT_TYPE_WORLD) && timer->is_valid) {
@@ -1704,6 +1698,18 @@ void handle_player_attack(Entity* projectile) {
 // -----------------------------------------------------------------------
 //                   UPDATE FUNCTIONS FOR UPDATE LOOP
 // -----------------------------------------------------------------------
+
+void update_entity_rolling_text(Entity* entity) {
+	if (entity->timer->is_valid) {
+		if (timer_finished(entity->timer)) {
+			if (entity->timer->counter <= entity->text.count) {
+				entity->counter++;
+			} else {
+				entity->timer->is_valid = false; // Removes the timer once finished.
+			}
+		}
+	}
+}
 
 void update_boss_position_if_over_limit(Entity* boss) {
     // Uppdatera bossens position baserat på dess hastighet
@@ -2275,14 +2281,8 @@ void draw_entity_player(Entity* entity) {
 }
 
 void draw_entity_rolling_text(Entity* entity) {
-	if (timer_finished(entity->timer)) {
-		if (entity->timer->counter > entity->text.count) {
-			entity->timer->counter = entity->text.count;
-		}
-	}
-
 	// Use string_view to get the substring to display
-    string temp = string_view(entity->text, 0, entity->timer->counter);
+    string temp = string_view(entity->text, 0, entity->counter);
 
     // Convert the string to a null-terminated C string for drawing
     char* temp_cstr = temp_convert_to_null_terminated_string(temp);
@@ -2817,9 +2817,7 @@ void update_game() {
 				}
 			} break;
 
-			case ENTITY_PLAYER: {
-				limit_player_position(player);
-			} break;
+			case ENTITY_PLAYER: limit_player_position(player); break;
 
 			case ENTITY_BOSS: {
 				switch(current_stage_level) {
@@ -2830,6 +2828,8 @@ void update_game() {
 					default: break;
 				}
 			} break;
+
+			case ENTITY_ROLLING_TEXT: update_entity_rolling_text(entity); break;
 
 			default: break;
 		}
@@ -2843,13 +2843,9 @@ void update_game() {
 		play_one_audio_clip(STR("res/sound_effects/Impact_038.wav"), 0.5);
 		current_stage_level = 0;
 		number_of_shots_missed = 0;
+		remove_all_particles();
 		clean_world();
 		world->world_background = COLOR_BLACK;
-		remove_all_particle_type(PFX_SNOW);
-		remove_all_particle_type(PFX_ASH);
-		remove_all_particle_type(PFX_LEAF);
-		remove_all_particle_type(PFX_RAIN);
-		remove_all_particle_type(PFX_WIND);
 		summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	}
 }
@@ -3043,46 +3039,42 @@ int entry(int argc, char **argv) {
 				charge_time_projectile = 0.0f;  // Reset the charge time to prevent unintended effects
 			}
 		
+			static bool has_played_sound_1 = false;
+			static bool has_played_sound_2 = false;
 
-
-			if (player->entity->is_valid && !game_over && !is_game_paused) {
-				
-				static bool has_played_sound_1 = false;
-				static bool has_played_sound_2 = false;
-
-				if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
-						play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"), 1.0);
-						has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
-
-				if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
-						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
-
-				if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
-						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
-				
-				if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) {
-					consume_key_just_pressed(MOUSE_BUTTON_LEFT);
-
-					// Create a new projectile and set its properties
-					Entity* projectile = create_entity();
-					summon_projectile_player(projectile, player);
-
-					handle_player_attack(projectile);
+			if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
+					play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"), 1.0);
+					has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 				}
 
-				if (charge_time_projectile == 0) {
-					has_played_sound_1 = false; // Återställ flaggan när projektilen laddas om
-					has_played_sound_2 = false;
+			if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
+					play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
+					has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 				}
-				// Update player position as usual
-				update_player_position(player);
-				update_player(player);
+
+			if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
+					play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
+					has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+				}
+			
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) {
+				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
+
+				// Create a new projectile and set its properties
+				Entity* projectile = create_entity();
+				summon_projectile_player(projectile, player);
+
+				handle_player_attack(projectile);
 			}
+
+			if (charge_time_projectile == 0) {
+				has_played_sound_1 = false; // Återställ flaggan när projektilen laddas om
+				has_played_sound_2 = false;
+			}
+			// Update player position as usual
+			update_player_position(player);
+			update_player(player);
+		
 		}
 
 		update_game();
