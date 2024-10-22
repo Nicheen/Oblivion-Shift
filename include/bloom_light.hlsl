@@ -20,7 +20,7 @@ float4 get_light_contribution(PS_INPUT input) {
     float2 vertex_pos = input.position_screen.xy;  // In pixels
     vertex_pos.y = window_size.y - vertex_pos.y; // Adjust for Y inversion
 
-    float4 total_light_contribution = float4(0, 0, 0, 1);
+    float4 total_light_contribution = float4(0, 0, 0, 0);
 
     for (int i = 0; i < light_count; i++) {
         LightSource light = lights[i];

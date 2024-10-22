@@ -2863,6 +2863,7 @@ int entry(int argc, char **argv) {
 	window.y = 0;
 	window.clear_color = COLOR_BLACK; // Background color
 	window.fullscreen = window_fullscreen;
+	window.force_topmost = false; 
 
 	draw_frame.projection = m4_make_orthographic_projection(window.width * -0.5, window.width * 0.5, window.height * -0.5, window.height * 0.5, -1, 10);
 
@@ -2945,7 +2946,8 @@ int entry(int argc, char **argv) {
 		mouse_position = MOUSE_POSITION();
 
 		// Change this to change the white lines that bound the players movements
-		world->playable_width = v2(400, 400); 
+		world->playable_width = v2(400, 400);
+		window.clear_color = world->world_background;
 		
 		// Camera Stuff
 		camera_trauma -= delta_t;
@@ -3051,17 +3053,17 @@ int entry(int argc, char **argv) {
 				static bool has_played_sound_2 = false;
 
 				if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
-						play_one_audio_clip(STR("res/sound_effects/new-notification-7-210334edited.wav"), 1.0);
+						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
 						has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 
 				if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
+						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
 						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 
 				if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
-						play_one_audio_clip(STR("res/sound_effects/system-notification-199277edited.wav"), 1.0);
+						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
 						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
 					}
 				
