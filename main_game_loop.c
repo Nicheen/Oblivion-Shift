@@ -47,6 +47,7 @@ Gfx_Font* font_light = NULL;
 Gfx_Font* font_bold = NULL;
 Gfx_Image* heart_sprite = NULL;
 Gfx_Image* effect_heart_sprite = NULL;
+Gfx_Image* background_sprite = NULL;
  
 bool debug_mode = false;
 bool game_over = false;
@@ -2024,8 +2025,8 @@ void draw_death_borders(TimedEvent* timedevent) {
 }
 
 void draw_hearts() {
-    int heart_size = 100;
-    int heart_padding = 0;
+    int heart_size = 30;
+    int heart_padding = heart_size / 3;
     
     // Calculate the number of hearts to draw
     int hearts_to_draw = max(number_of_hearts - number_of_shots_missed, 0);
@@ -2700,8 +2701,11 @@ void initialize_new_stage() {
 // -----------------------------------------------------------------------
 
 void draw_game() {
-	draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
-
+	if (background_sprite) {
+		draw_image_in_frame(background_sprite, v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), COLOR_WHITE, current_draw_frame);
+	} else {
+		draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
+	}
 	draw_hearts();
 	
 	draw_center_stage_text();
@@ -2898,6 +2902,9 @@ int entry(int argc, char **argv) {
 
 	effect_heart_sprite = load_image_from_disk(STR("res/textures/effect_heart.png"), get_heap_allocator());
 	assert(effect_heart_sprite, "Failed loading 'res/textures/effect_heart.png'");
+
+	background_sprite = load_image_from_disk(STR("res/textures/background.png"), get_heap_allocator());
+	assert(background_sprite, "Failed loading 'res/textures/background.png'");
 
 	// Here we create the player object
 	mouse_entity = create_entity();
