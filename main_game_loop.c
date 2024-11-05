@@ -22,6 +22,7 @@ int number_of_block_obstacles = 0;
 int number_of_particles = 0;
 
 float projectile_speed = 500;
+bool up_player_pos = false;
 float max_cam_shake_translate = 200.0f;
 int number_of_hearts = 3;
 int current_stage_level = 0;
@@ -634,7 +635,7 @@ Entity* setup_player_entity(Entity* entity) {
 	entity->entitytype = ENTITY_PLAYER;
 
 	entity->size = v2(50, 20);
-	entity->position = v2(0, -300);
+	entity->position = v2(0, -600);
 	entity->color = COLOR_WHITE;
 
 	return entity;
@@ -655,9 +656,9 @@ Player* create_player() {
     player->entity = setup_player_entity(player->entity);  // Assuming setup_player handles the initial setup of the Entity
     
     // Additional player-specific attributes
-    player->max_speed = 500.0f;  // Example max speed
-    player->min_speed = 1.0f;   // Example min speed
-	player->max_bounce = 200.0f;
+    player->max_speed = 700.0f;  // Example max speed
+    player->min_speed = 100.0f;   // (måsta vara lite större annars driftar spelaren lätt)
+	player->max_bounce = 250.0f;
 	player->damp_bounce = 0.5;
 
 	player->entity->acceleration = v2(2500.0f, 0.0f);
@@ -668,8 +669,16 @@ Player* create_player() {
 
 void summon_projectile_player(Entity* entity, Player* player) {
 	entity->entitytype = ENTITY_PROJECTILE;
+	
+	int setup_y_offset;
+	if (up_player_pos){
+		setup_y_offset = -20;
+	}
+	
+	else{
+		setup_y_offset = 20;
+	}
 
-	int setup_y_offset = 20;
 	entity->size = v2(10, 10);
 	entity->health = 1;
 	entity->max_bounces = 100;
@@ -1539,7 +1548,7 @@ void update_player_position(Player* player) {
     static float dash_cooldown = 0.5f; // Cooldown time in seconds
     static float dash_timer = 0.5f;   // Timer to track cooldown
     static bool shift_released = true; // Track if shift has been released
-    float dash_distance = 50.0f;    // Distance to teleport when dashing
+    float dash_distance = 75.0f;    // Distance to teleport when dashing
 
     // Update dash cooldown timer
     if (!can_dash) {
@@ -1551,7 +1560,7 @@ void update_player_position(Player* player) {
     }
 
     // Check for left movement (A key or left arrow)
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && player->entity->position.x > -world->playable_width.x / 2 + player->entity->size.x / 2) {
+    if ((is_key_down('A')) && player->entity->position.x > -world->playable_width.x / 2 + player->entity->size.x / 2) {
         input_axis.x -= 1.0f;
         moving = true;
 
@@ -1565,7 +1574,7 @@ void update_player_position(Player* player) {
     }
 
     // Check for right movement (D key or right arrow)
-    if ((is_key_down('D') || is_key_down(KEY_ARROW_RIGHT)) && player->entity->position.x < world->playable_width.y / 2 - player->entity->size.x / 2) {
+    if ((is_key_down('D')) && player->entity->position.x < world->playable_width.y / 2 - player->entity->size.x / 2) {
         input_axis.x += 1.0f;
         moving = true;
 
@@ -1579,19 +1588,19 @@ void update_player_position(Player* player) {
     }
 
     // If both keys are pressed, stop moving
-    if ((is_key_down('A') || is_key_down(KEY_ARROW_LEFT)) && (is_key_down('D') || is_key_down(KEY_ARROW_RIGHT))) {
+    if ((is_key_down('A')) && (is_key_down('D'))) {
         input_axis.x = 0;
         moving = false;
         previous_input = -1;  // No active movement
     }
 
     // Check if shift has been released
-    if (!is_key_down('S')) {
+    if (!is_key_down(KEY_SHIFT)) {
         shift_released = true;  // Reset shift_released when shift is not pressed
     }
 
     // Dash (teleport) when shift is pressed AND shift was previously released
-    if (is_key_down('S') && shift_released && can_dash && (is_key_down('A') || is_key_down('D'))) {
+    if (is_key_down(KEY_SHIFT) && shift_released && can_dash && (is_key_down('A') || is_key_down('D'))) {
         if (previous_input == 0) {
             // Dashing to the left
             player->entity->position.x -= dash_distance;
@@ -1608,7 +1617,16 @@ void update_player_position(Player* player) {
         can_dash = false;  // Start cooldown
         shift_released = false;  // Prevent further dashes until shift is released
     }
-
+	if ((is_key_down('W'))) {
+        player->entity->position.y = 600;
+        moving = true;
+		up_player_pos = true;
+	}
+	if ((is_key_down('S'))) {
+        player->entity->position.y = -600;
+        moving = true;
+		up_player_pos = false;
+	}
     // Normalize input_axis for proper direction
     input_axis = v2_normalize(input_axis);
 
@@ -1625,17 +1643,17 @@ void update_player_position(Player* player) {
             player->entity->velocity = v2_mulf(v2_normalize(player->entity->velocity), player->max_speed * speed_multiplier);
         }
     } else {
-        // Deceleration if no keys are pressed
-        if (v2_length(player->entity->velocity) > player->min_speed) {
-            Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
-            player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
+		if (v2_length(player->entity->velocity) >= player->min_speed) {
+			Vector2 decel_vector = v2_mulf(v2_normalize(player->entity->velocity), -player->entity->deceleration.x * delta_t);
+			player->entity->velocity = v2_add(player->entity->velocity, decel_vector);
 
-            // Stop if near zero speed
-            if (v2_length(player->entity->velocity) < player->min_speed) {
-                player->entity->velocity = v2(0, 0);
-            }
-        }
-    }
+			if (v2_length(player->entity->velocity) < player->min_speed) {
+				player->entity->velocity = v2(0, 0);
+			}
+		} else {
+			player->entity->velocity = v2(0, 0);
+		}
+	}
 }
 
 void limit_player_position(Player* player){
@@ -2949,7 +2967,7 @@ int entry(int argc, char **argv) {
 		mouse_position = MOUSE_POSITION();
 
 		// Change this to change the white lines that bound the players movements
-		world->playable_width = v2(400, 400);
+		world->playable_width = v2(1024, 1024);
 		window.clear_color = world->world_background;
 		
 		// Camera Stuff
