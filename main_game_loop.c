@@ -635,9 +635,9 @@ Entity* setup_player_entity(Entity* entity) {
 	entity->entitytype = ENTITY_PLAYER;
 
 	entity->size = v2(50, 20);
-	entity->position = v2(0, -600);
+	entity->position = v2(0, -0.55 * window.height);
 	entity->color = COLOR_WHITE;
-
+	printf("yo %o\n", window.height);
 	return entity;
 }
 
@@ -1617,16 +1617,18 @@ void update_player_position(Player* player) {
         can_dash = false;  // Start cooldown
         shift_released = false;  // Prevent further dashes until shift is released
     }
-	if ((is_key_down('W'))) {
-        player->entity->position.y = 600;
-        moving = true;
+	if (is_key_down('W')) {
+		player->entity->position.y = (0.42* window.height);
+		moving = true;
 		up_player_pos = true;
+		printf("yo %o\n", window.height);
 	}
-	if ((is_key_down('S'))) {
-        player->entity->position.y = -600;
-        moving = true;
+	if (is_key_down('S')) {
+		player->entity->position.y = -(0.84* window.height/2);
+		moving = true;
 		up_player_pos = false;
 	}
+
     // Normalize input_axis for proper direction
     input_axis = v2_normalize(input_axis);
 
