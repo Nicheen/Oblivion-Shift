@@ -66,6 +66,7 @@ typedef enum ObstacleType {
 	OBSTACLE_BLOCK = 3,
 	OBSTACLE_DROP = 4,
 	OBSTACLE_BEAM = 6,
+	OBSTACLE_INVERTED_BEAM = 7,
 
 	OBSTACLE_MAX,
 } ObstacleType;

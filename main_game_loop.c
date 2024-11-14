@@ -996,7 +996,19 @@ void setup_obstacle(Entity* entity, int x_index, int y_index) {
 		setup_block_obstacle(entity, x_index, y_index);
 		number_of_block_obstacles++;
 	} 
-	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
+	else if (random_value <= SPAWN_RATE_INVERTED_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE)
+	{
+		entity->obstacle_type = OBSTACLE_INVERTED_BEAM;
+        entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
+        entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
+        entity->drop_interval_timer = 0.0f;
+		entity->color = ((Vector4){1, 0.7, 1.0, 1.0});
+
+		Entity* beam = create_entity();
+		setup_beam(entity, beam);
+		entity->child = beam;
+	}
+	else if(random_value <= SPAWN_RATE_BEAM_OBSTACLE + SPAWN_RATE_INVERTED_BEAM_OBSTACLE + SPAWN_RATE_DROP_OBSTACLE + SPAWN_RATE_HARD_OBSTACLE + SPAWN_RATE_BLOCK_OBSTACLE) {
         entity->obstacle_type = OBSTACLE_BEAM;
         entity->drop_interval = get_random_float32_in_range(10.0f, 20.0f);  // Tid mellan strålar
         entity->drop_duration_time = 1.0f;  // Strålen varar i 1 sekund
@@ -2018,6 +2030,33 @@ void draw_beam(Entity* entity) {
     }
 }
 
+void draw_inverted_beam(Entity* entity) {
+    if (entity->child != NULL) {
+        float max_beam_size = 5.0f;
+
+        if (timer_finished(entity->child->timer)) {
+            if (!entity->child->is_visible) {
+                //play_one_audio_clip(STR("res/sound_effects/laser.wav"), 0.5);
+                camera_shake(0.2);
+            }
+            entity->child->is_visible = true;
+
+            // Draw the real beam (red), centered on the entity
+            float beam_shoot_alpha = powf(min(entity->child->timer->duration_timer, 1.0f), 3);
+
+            entity->child->size = v2_mul(v2(max_beam_size, -(entity->position.y - window.height/2 )), v2(1, beam_shoot_alpha));
+            entity->child->position = v2_sub(entity->position, v2(entity->child->size.x / 2, -(entity->child->size.y + entity->size.y / 2)));
+            draw_rect_in_frame(entity->child->position, entity->child->size, COLOR_WHITE, current_draw_frame);
+        }
+        else
+        {
+            entity->child->is_visible = false;
+        }
+    }
+}
+
+
+
 void draw_playable_area_borders() {
 	draw_line_in_frame(v2(-world->playable_width.x / 2, -window.height / 2), v2(-world->playable_width.x / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
 	draw_line_in_frame(v2(world->playable_width.y / 2, -window.height / 2), v2(world->playable_width.y / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
@@ -2417,6 +2456,7 @@ void draw_entity_obstacle(Entity* entity) {
 	{
 		case(OBSTACLE_DROP):  draw_drop(entity); break;
 		case(OBSTACLE_BEAM):  draw_beam(entity); break;
+		case(OBSTACLE_INVERTED_BEAM):  draw_inverted_beam(entity); break;
 		case(OBSTACLE_HARD):  entity->color = v4(0.5 * sin(now + 3*PI32) + 0.5, 0, 1, 1); break;
 		case(OBSTACLE_BLOCK): draw_obstacle_block(entity); break;
 		case(OBSTACLE_BASE): {}; break;
@@ -2911,6 +2951,7 @@ void update_game() {
 				switch (entity->obstacle_type) {
 					case OBSTACLE_DROP: update_obstacle_drop(entity); break;
 					case OBSTACLE_BEAM: handle_beam_collision(entity); break;
+					case OBSTACLE_INVERTED_BEAM: handle_beam_collision(entity); break;
 					default: break;
 				}
 
@@ -3225,6 +3266,12 @@ int entry(int argc, char **argv) {
 							create_rectangular_light_source(v2_add(entity->child->position, v2_mulf(entity->child->size, 0.5)), COLOR_RED, v2(entity->child->size.y, entity->child->size.x * 5.0f), 0, v2(0, 1), 1.0f, &scene_cbuffer);
 						}
 					}
+					if (entity->obstacle_type == OBSTACLE_INVERTED_BEAM) {
+						if (entity->child->is_visible) {
+							create_rectangular_light_source(v2_add(entity->child->position, v2_mulf(entity->child->size, 0.5)), COLOR_RED, v2(entity->child->size.y, entity->child->size.x * 5.0f), 0, v2(0, 1), 1.0f, &scene_cbuffer);
+						}
+					}
+				
 				}
 				// Use circular lights for projectiles and effects
 				else if (entity->entitytype == ENTITY_PROJECTILE || entity->entitytype == ENTITY_EFFECT) {
