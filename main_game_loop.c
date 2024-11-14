@@ -1540,17 +1540,32 @@ void handle_beam_collision(Entity* entity) {
 //                         PLAYER FUNCTIONS
 // -----------------------------------------------------------------------
 void update_player(Player* player) {
-    // Hantera immunitetstiden
     if (player->is_immune) {
-        player->immunity_timer -= delta_t;  // Minska timer för varje current_draw_frame
+        player->immunity_timer -= delta_t;
+
+        float start_blink_interval = 0.1f;
+        float end_blink_interval = 0.4f;
+
+        float time_fraction = 1.0f - (player->immunity_timer / 1.0f); 
+        float blink_interval = start_blink_interval * powf((end_blink_interval / start_blink_interval), time_fraction);
+
+        bool is_blinking = fmodf(player->immunity_timer, blink_interval * 2) < blink_interval;
         
+        if (is_blinking) {
+            player->entity->color = v4(1.0f, 1.0f, 1.0f, 0.3f); 
+        } else {
+            player->entity->color = v4(1.0f, 1.0f, 1.0f, 1.0f); 
+        }
+
         if (player->immunity_timer <= 0.0f) {
-            // När timern har gått ut, återställ immuniteten
             player->is_immune = false;
-            player->immunity_timer = 0.0f;  // Sätt timer till 0 (även om det är redundant, det klargör att immuniteten är slut)
+            player->immunity_timer = 0.0f;
+            player->entity->color = v4(1.0f, 1.0f, 1.0f, 1.0f);  
         }
     }
 }
+
+
 
 void update_player_position(Player* player) {
     Vector2 input_axis = v2(0, 0);  // Initialize input axis
