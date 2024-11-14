@@ -2200,6 +2200,28 @@ void draw_boss_health_bar() {
 	}
 }
 
+void draw_charge_attack_icon(bool enhanced_projectile_damage) {
+    float size = 50.0f; 
+    Vector2 position = v2(-window.width / 4, -window.height / 2.46);
+
+    draw_rect(position, v2(2*size, size), v4(0.5, 0.5, 0.5, 0.5));
+
+    u32 font_height = 24;
+	string label = STR("");
+	if (enhanced_projectile_damage){
+		label = STR("Attack");
+	}
+
+	else{
+		label = STR("Speed");
+	}
+
+    Vector2 text_position = v2((-window.width/4) + 20 , (-window.height/2.46) + 20); // Placera texten under kvadraten
+
+    // Här anropas draw_text för att rita texten
+    draw_text(font_bold, label, font_height, text_position, v2(1, 1), COLOR_WHITE);
+}
+
 void draw_charge_attack_bar(float charge_time_projectile, float max_charge_time, float x_offset, float y_offset) {
     // Progress bar inställningar
     float charge_bar_height = 30;
@@ -3295,11 +3317,15 @@ int entry(int argc, char **argv) {
 				draw_selected_entity_information();
 			}
 
-			draw_boss_health_bar();
-
-			if (is_key_down(MOUSE_BUTTON_RIGHT) && !is_game_paused || (charge_time_projectile/max_charge_time) >= 1 && !is_game_paused) {
-				draw_charge_attack_bar(charge_time_projectile, max_charge_time, -600, -1000);
+			if (!is_game_paused){
+				draw_boss_health_bar();
 			}
+			
+			if (is_key_down(MOUSE_BUTTON_RIGHT) && !is_game_paused || (charge_time_projectile/max_charge_time) >= 1 && !is_game_paused) {
+				draw_charge_attack_bar(charge_time_projectile, max_charge_time, -window.width / 4, -window.height / 1.5);
+			}
+
+			draw_charge_attack_icon(enhanced_projectile_damage);
 
 			draw_stage_timers();
 
