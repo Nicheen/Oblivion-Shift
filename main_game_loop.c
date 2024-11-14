@@ -3112,7 +3112,11 @@ int entry(int argc, char **argv) {
 			if (is_key_down(MOUSE_BUTTON_RIGHT)) {
 				charge_time_projectile += delta_t;  // Increase charge time
 			}
-			
+
+			if (!is_key_down(MOUSE_BUTTON_RIGHT) && charge_time_projectile < max_charge_time) {
+				charge_time_projectile = 0;  // Increase charge time
+			}
+
 			// Toggle between enhanced damage and enhanced speed with 'E'
 			if (is_key_just_pressed('E')) {
 				// Toggle the abilities
