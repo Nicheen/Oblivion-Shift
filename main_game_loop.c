@@ -21,7 +21,7 @@ int number_of_effects = 0;
 int number_of_block_obstacles = 0;
 int number_of_particles = 0;
 
-float projectile_speed = 500;
+float projectile_speed = 500.f;
 bool up_player_pos = false;
 float max_cam_shake_translate = 200.0f;
 int number_of_hearts = 3;
@@ -1686,6 +1686,7 @@ void limit_player_position(Player* player){
 void handle_player_attack(Entity* projectile) {
 	// Adjust damage based on charge time
 	int charge_based_damage = 1;  // Default damage is 1
+	float projectile_speed = 500.0f; // Default speed
 	if (enhanced_projectile_damage) {
 		// If damage enhancement is active
 		if (charge_time_projectile >= 3.0f) {
@@ -1702,12 +1703,23 @@ void handle_player_attack(Entity* projectile) {
 	projectile->damage = charge_based_damage;  // Set damage based on the active enhancement
 
 	// Set projectile speed
-	projectile_speed = 500.0f; // Default speed
 	if (enhanced_projectile_speed) {
 		if (charge_time_projectile >= 2.0f) {
-			projectile_speed *= 2.0f;
+			projectile_speed = 1000.f;
 		}
 	}
+	int setup_y_offset;
+	if (up_player_pos){
+		setup_y_offset = -20;
+	}
+	
+	else{
+		setup_y_offset = 20;
+	}
+
+	Vector2 normalized_velocity = v2_normalize(v2_sub(mouse_position, v2(player->entity->position.x, player->entity->position.y + setup_y_offset)));
+	projectile->velocity = v2_mulf(normalized_velocity, projectile_speed);
+
 	// Assuming your projectile has a velocity field, set the speed
 	// projectile->velocity = v2_mulf(v2_normalize(projectile->velocity), projectile_speed); // Apply speed
 	
@@ -2187,6 +2199,51 @@ void draw_boss_health_bar() {
 		}
 	}
 }
+
+void draw_charge_attack_bar(float charge_time_projectile, float max_charge_time, float x_offset, float y_offset) {
+    // Progress bar inställningar
+    float charge_bar_height = 30;
+    float charge_bar_width = 100;
+    float padding = 250; // Justera detta för vertikal position
+    float margin = 5;
+
+    // Beräkna laddningsprocenten som en procentsats (0 till 1)
+    float alpha = charge_time_projectile / max_charge_time;
+    if (alpha > 1.0f) alpha = 1.0f;  // Se till att alpha inte överstiger 100%
+
+    // Rita bakgrundsramen för laddningsbaren
+    draw_rect(
+        v2(x_offset - charge_bar_width / 2 - margin, window.height / 2 - charge_bar_height - padding - margin + y_offset),  // Justera x och y här
+        v2(charge_bar_width + 2 * margin, charge_bar_height + 2 * margin),
+        v4(0.5, 0.5, 0.5, 0.5)  // Grå bakgrund med lätt transparens
+    );
+
+    // Rita själva laddningsindikatorn i rött, proportionell mot laddningsprocenten
+    draw_rect(
+        v2(x_offset - charge_bar_width / 2, window.height / 2 - charge_bar_height - padding + y_offset),  // Justera x och y här
+        v2(charge_bar_width * alpha, charge_bar_height),
+        v4(1, 0.7, 0.0, 0.7)
+    );
+
+    // Visa laddningstiden i sekunder på laddningsbaren
+    if (charge_time_projectile > 0) {
+        string label = sprint(get_temporary_allocator(), STR("%.1f"), fmin(charge_time_projectile, max_charge_time));  // Exempel: "1.2s"
+        u32 font_height = 48;
+        Gfx_Text_Metrics m = measure_text(font_bold, label, font_height, v2(1, 1));
+
+        // Rita texten centrerad i laddningsbaren
+        draw_text(
+            font_bold,
+            label,
+            font_height,
+            v2(x_offset - charge_bar_width / 2 + charge_bar_width * alpha / 2 - m.visual_size.x / 2,
+               window.height / 2 - charge_bar_height - padding + 10 + y_offset),  // Justera x och y här
+            v2(1, 1),
+            COLOR_WHITE
+        );
+    }
+}
+
 
 void stage_tutorial() {
 	summon_text(COLOR_WHITE, v2(0, 0), STR("WELCOME\nTRY NOT TO DIE!"));
@@ -2933,7 +2990,7 @@ int entry(int argc, char **argv) {
 	selected_entity->position = v2(-9999, -9999);
 	
 	player = create_player();
-	
+	float max_charge_time = 3;
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
 	world->world_background = COLOR_BLACK;
 	summon_text(COLOR_WHITE, v2(-100, 50), STR("Welcome Player"));
@@ -3047,53 +3104,59 @@ int entry(int argc, char **argv) {
 				debug_entity_position = MOUSE_POSITION();
 			}
 		}
-	
+
 		if (player->entity->is_valid && !game_over && !is_game_paused) {
 			// Track charging time while the right mouse button is held down
+			
+
 			if (is_key_down(MOUSE_BUTTON_RIGHT)) {
 				charge_time_projectile += delta_t;  // Increase charge time
 			}
-
+			
 			// Toggle between enhanced damage and enhanced speed with 'E'
 			if (is_key_just_pressed('E')) {
 				// Toggle the abilities
+				charge_time_projectile = 0;
 				if (enhanced_projectile_damage) {
 					enhanced_projectile_damage = false;
 					enhanced_projectile_speed = true;  // Enable speed enhancement
+					max_charge_time = 2;
 				} else {
 					enhanced_projectile_damage = true;
 					enhanced_projectile_speed = false;  // Enable damage enhancement
+					max_charge_time = 3;
 				}
 				// Reset the charge time when toggling enhancements
-				charge_time_projectile = 0.0f;  // Reset the charge time to prevent unintended effects
 			}
 		
 			static bool has_played_sound_1 = false;
 			static bool has_played_sound_2 = false;
 
-				if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
-						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
-						has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
+			if (!has_played_sound_1 && enhanced_projectile_damage && charge_time_projectile >= 1.0f) {
+					play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
+					has_played_sound_1 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+				}
 
-				if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
-						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
-						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
+			if (!has_played_sound_2 && enhanced_projectile_damage && charge_time_projectile >= 3.0f) {
+					play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
+					has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+				}
 
-				if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
-						play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
-						has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
-					}
+			if (!has_played_sound_2 && enhanced_projectile_speed && charge_time_projectile >= 2.0f) {
+					play_one_audio_clip(STR("res/sound_effects/menu_button_sound.wav"), 1.0);
+					has_played_sound_2 = true; // Sätt flaggan till true så att ljudet inte spelas igen
+				}
+			
+			if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
+				consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 				
-				if (is_key_just_pressed(MOUSE_BUTTON_LEFT) || is_key_just_pressed(KEY_SPACEBAR)) {
-					consume_key_just_pressed(MOUSE_BUTTON_LEFT);
 
 				// Create a new projectile and set its properties
 				Entity* projectile = create_entity();
 				summon_projectile_player(projectile, player);
 
 				handle_player_attack(projectile);
+				charge_time_projectile = 0;
 			}
 
 			if (charge_time_projectile == 0) {
@@ -3229,6 +3292,10 @@ int entry(int argc, char **argv) {
 			}
 
 			draw_boss_health_bar();
+
+			if (is_key_down(MOUSE_BUTTON_RIGHT) && !is_game_paused || (charge_time_projectile/max_charge_time) >= 1 && !is_game_paused) {
+				draw_charge_attack_bar(charge_time_projectile, max_charge_time, -600, -1000);
+			}
 
 			draw_stage_timers();
 
