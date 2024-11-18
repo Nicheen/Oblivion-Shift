@@ -1602,7 +1602,7 @@ void update_player_position(Player* player) {
     }
 
     // Check for right movement (D key or right arrow)
-    if ((is_key_down('D')) && player->entity->position.x < world->playable_width.y / 2 + x_offset_border - player->entity->size.x / 2) {
+    if ((is_key_down('D')) && player->entity->position.x < world->playable_width.x / 2 - player->entity->size.x / 2) {
         input_axis.x += 1.0f;
         moving = true;
 
@@ -1638,8 +1638,8 @@ void update_player_position(Player* player) {
         } else if (previous_input == 1) {
             // Dashing to the right
             player->entity->position.x += dash_distance;
-            if (player->entity->position.x > world->playable_width.y / 2 + x_offset_border - player->entity->size.x / 2) {
-                player->entity->position.x = world->playable_width.y / 2 + x_offset_border - player->entity->size.x / 2;  // Prevent out of bounds
+            if (player->entity->position.x > world->playable_width.x / 2 - player->entity->size.x / 2) {
+                player->entity->position.x = world->playable_width.x / 2 - player->entity->size.x / 2;  // Prevent out of bounds
             }
         }
         can_dash = false;  // Start cooldown
@@ -1688,8 +1688,8 @@ void update_player_position(Player* player) {
 
 void limit_player_position(Player* player){
     // Begränsa spelarens position inom spelområdet
-    if (player->entity->position.x > world->playable_width.y / 2 + x_offset_border - player->entity->size.x / 2) {
-        player->entity->position.x = world->playable_width.y / 2 + x_offset_border - player->entity->size.x / 2;
+    if (player->entity->position.x > world->playable_width.x / 2 - player->entity->size.x / 2) {
+        player->entity->position.x = world->playable_width.x / 2 - player->entity->size.x / 2;
 
         // Om hastigheten är tillräckligt hög, studsa tillbaka
         if (fabs(player->entity->velocity.x) > player->max_bounce) {
@@ -2075,7 +2075,7 @@ void draw_inverted_beam(Entity* entity) {
 
 void draw_playable_area_borders() {
 	draw_line_in_frame(v2(-world->playable_width.x / 2 + x_offset_border, -window.height / 2), v2(-world->playable_width.x / 2 + x_offset_border, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
-	draw_line_in_frame(v2(world->playable_width.y / 2 + x_offset_border, -window.height / 2), v2(world->playable_width.y / 2 + x_offset_border, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
+	draw_line_in_frame(v2(world->playable_width.x / 2, -window.height / 2), v2(world->playable_width.x / 2, window.height / 2), 2, COLOR_WHITE, current_draw_frame);
 }
 
 void draw_death_borders(TimedEvent* timedevent) {
@@ -2859,7 +2859,7 @@ void draw_game() {
 	if (background_sprite) {
 		
 		draw_image_in_frame(background_sprite, v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), COLOR_WHITE, current_draw_frame);
-		draw_rect_in_frame(v2(-world->playable_width.y / 2 + x_offset_border, -window.height / 2), v2(world->playable_width.y, window.height), v4(0, 0, 0, 0.9), current_draw_frame);
+		draw_rect_in_frame(v2(-world->playable_width.x / 2 + x_offset_border, -window.height / 2), v2(world->playable_width.y, window.height), v4(0, 0, 0, 0.9), current_draw_frame);
 	} else {
 		draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
 	}
@@ -2952,7 +2952,7 @@ void update_game() {
 				}
 
 				// Check projectile bounds
-				if (entity->position.x <= -world->playable_width.x / 2 + x_offset_border || entity->position.x >= world->playable_width.y / 2 + x_offset_border) {
+				if (entity->position.x <= -world->playable_width.x / 2 + x_offset_border || entity->position.x >= world->playable_width.x / 2) {
 					projectile_bounce_world(entity);
 					play_one_audio_clip(STR("res/sound_effects/vägg_thud.wav"), 1.0);
 				}
@@ -3108,7 +3108,7 @@ int entry(int argc, char **argv) {
 
 		// Change this to change the white lines that bound the players movements
 		x_offset_border = 100*sin(now); 
-		world->playable_width = v2(1024 + x_offset_border, 1024 + x_offset_border);
+		world->playable_width = v2(1024 + x_offset_border, 1024);
 		window.clear_color = world->world_background;
 		
 		// Camera Stuff
@@ -3269,7 +3269,7 @@ int entry(int argc, char **argv) {
 			create_rectangular_light_source(v2(0,  window.height / 2), barrier_color, v2(window.width, 40 + 10*(sin(now) + 3)), 0, v2(1, 0), 0.5f, &scene_cbuffer);
 			
 			create_rectangular_light_source(v2(-world->playable_width.x / 2 + x_offset_border, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
-			create_rectangular_light_source(v2( world->playable_width.y / 2 + x_offset_border, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
+			create_rectangular_light_source(v2( world->playable_width.x / 2, 0), COLOR_WHITE, v2(window.height, 10), 0, v2(0, 1), 0.5f, &scene_cbuffer);
 
 			for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
 				Entity* entity = &world->entities[i];
