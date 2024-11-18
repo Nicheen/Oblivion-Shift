@@ -2857,6 +2857,7 @@ void initialize_new_stage() {
 void draw_game() {
 	if (background_sprite) {
 		draw_image_in_frame(background_sprite, v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), COLOR_WHITE, current_draw_frame);
+		draw_rect_in_frame(v2(-world->playable_width.x / 2, -window.height /2), v2(world->playable_width.x, window.height), v4(0, 0, 0, 0.9), current_draw_frame);
 	} else {
 		draw_rect_in_frame(v2(-window.width / 2, -window.height / 2), v2(window.width, window.height), world->world_background, current_draw_frame);
 	}
