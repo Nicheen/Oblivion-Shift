@@ -1696,9 +1696,7 @@ void limit_player_position(Player* player){
         // Om hastigheten är tillräckligt hög, studsa tillbaka
         if (fabs(player->entity->velocity.x) > player->max_bounce) {
             player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
-        } else {
-            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
-        }
+        } 
     }
 
     if (player->entity->position.x < -world->playable_width.x / 2 + player->entity->size.x / 2) {
@@ -1707,9 +1705,7 @@ void limit_player_position(Player* player){
         // Om hastigheten är tillräckligt hög, studsa tillbaka
         if (fabs(player->entity->velocity.x) > player->max_bounce) {
             player->entity->velocity.x = -player->entity->velocity.x * player->damp_bounce;  // Reflektera och dämpa hastigheten
-        } else {
-            player->entity->velocity.x = 0;  // Stanna om vi träffar kanten med låg hastighet
-        }
+        } 
     }
 }
 
