@@ -1993,10 +1993,6 @@ void update_obstacle_drop(Entity* entity) {
 	}
 }
 
-void update_mouse_entity_position(Entity* entity) {
-	entity->position = MOUSE_POSITION();
-}
-
 // -----------------------------------------------------------------------
 //                   DRAW FUNCTIONS FOR DRAW LOOP
 // -----------------------------------------------------------------------
@@ -2388,35 +2384,6 @@ void draw_stage_timers() {
 
 		draw_text(font_bold, label, font_height, v2(base_x, base_y - (i+1) * spacing), v2(0.4, 0.4), faded_white);
     }
-}
-
-void draw_selected_entity_information() {
-	if (!(debug_entity_position.x == 0.0f) && !(debug_entity_position.y == 0.0f)) {
-		for (int i = 0; i < MAX_ENTITY_COUNT; i++) {
-			Entity* entity = &world->entities[i];
-			if (!entity->is_valid) continue;
-			if (entity == mouse_entity) continue;
-
-			if (circle_circle_collision_2(entity->position, debug_entity_position, entity->size, mouse_entity->size)) {
-				selected_entity = entity;
-				draw_text(
-					font_light,
-					sprint(get_temporary_allocator(),
-					STR(
-					"Position: %v2\nSize: %v2\nColor: %v4\n"
-					), 
-					selected_entity->position,
-					selected_entity->size,
-					selected_entity->color),
-					font_height,
-					selected_entity->position,
-					v2(0.4, 0.4),
-					COLOR_GREEN
-				);
-				break;
-			}
-		}
-	}
 }
 
 void draw_entity_effect(Entity* entity) {
@@ -3064,12 +3031,6 @@ int entry(int argc, char **argv) {
 	background_sprite = load_image_from_disk(STR("res/textures/background.png"), get_heap_allocator());
 	assert(background_sprite, "Failed loading 'res/textures/background.png'");
 
-	// Here we create the player object
-	mouse_entity = create_entity();
-	mouse_entity = setup_mouse_entity(mouse_entity);
-	selected_entity = create_entity();
-	selected_entity->position = v2(-9999, -9999);
-	
 	player = create_player();
 	float max_charge_time = 3;
 	summon_world(SPAWN_RATE_ALL_OBSTACLES);
@@ -3083,7 +3044,7 @@ int entry(int argc, char **argv) {
 	os_update();
 	while (!window.should_close) {
 		reset_temporary_storage();
-		update_mouse_entity_position(mouse_entity);
+
 		local_persist Os_Window last_window;
 		if ((last_window.width != window.width || last_window.height != window.height || !game_image) && window.width > 0 && window.height > 0) {
 			if (bloom_map)   delete_image(bloom_map);
@@ -3369,10 +3330,15 @@ int entry(int argc, char **argv) {
 		draw_image(final_image, v2(-window.width/2, -window.height/2), v2(window.width, window.height), COLOR_WHITE);
 		
 		{ //  ---- DRAW UI ----
+			if (debug_mode) {
+				draw_rect(v2(-window.width / 2, 0), v2(window.width / 2, window.height / 2), v4(0, 0, 0, 0.5));
+			}
+			
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("Stage: %i"), current_stage_level), font_height, v2(-window.width / 2, window.height / 2 - 25), v2(0.4, 0.4), COLOR_GREEN);
 			draw_text(font_light, sprint(get_temporary_allocator(), STR("fps: %i (%.2f ms)"), latest_fps, (float)1000 / latest_fps), font_height, v2(-window.width / 2, window.height / 2 - 50), v2(0.4, 0.4), COLOR_GREEN);
 				
 			if (debug_mode) {
+				
 				draw_line(player->entity->position, mouse_position, 2.0f, v4(1, 1, 1, 0.5));
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("entities: %i"), entity_counter), font_height, v2(-window.width / 2, window.height / 2 - 75), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("obstacles: %i, block: %i"), obstacle_count, number_of_block_obstacles), font_height, v2(-window.width / 2, window.height / 2 - 100), v2(0.4, 0.4), COLOR_GREEN);
@@ -3381,7 +3347,6 @@ int entry(int argc, char **argv) {
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("particles: %i"), number_of_particles), font_height, v2(-window.width / 2, window.height / 2 - 175), v2(0.4, 0.4), COLOR_GREEN);
 				draw_text(font_light, sprint(get_temporary_allocator(), STR("light sources: %i"), scene_cbuffer.light_count), font_height, v2(-window.width / 2, window.height / 2 - 200), v2(0.4, 0.4), COLOR_GREEN);
 				draw_timed_events();
-				draw_selected_entity_information();
 			}
 
 			if (!is_game_paused){
