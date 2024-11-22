@@ -1,8 +1,3 @@
 {
-  "C_Cpp.errorSquiggles": "disabled",
-  "files.associations": {
-    "xutility": "c",
-    "limits": "c",
-    "utility": "c"
-  }
+  "C_Cpp.errorSquiggles": "disabled"
 }

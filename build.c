@@ -28,8 +28,6 @@ typedef struct Context_Extra {
 // This defaults to "entry", but we can set it to anything (except "main" or other existing proc names"
 #define ENTRY_PROC entry
 
-#define ENABLE_PROFILING 1
-
 // Ooga booga needs to be included AFTER configuration and BEFORE the program code
 #include "oogabooga/oogabooga.c"
 
@@ -60,6 +58,4 @@ typedef struct Context_Extra {
 // #include "oogabooga/examples/sanity_tests.c"
 
 // This is where you swap in your own project!
-// #include "entry_yourepicgamename.c"
-
 #include "main_game_loop.c"

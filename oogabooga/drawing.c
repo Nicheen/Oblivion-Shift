@@ -401,7 +401,6 @@ Draw_Quad *draw_image_in_frame(Gfx_Image *image, Vector2 position, Vector2 size,
 	q->image = image;
 	q->uv = v4(0, 0, 1, 1);
 	
-	
 	return q;
 }
 Draw_Quad *draw_image_xform_in_frame(Gfx_Image *image, Matrix4 xform, Vector2 size, Vector4 color, Draw_Frame *frame) {
