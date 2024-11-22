@@ -31,6 +31,10 @@ Texture2D bloom_map: register(t0); // 0 because we bound to 0 in bloom.c
 
 */
 
+#define CURVATURE 4.2
+#define BLUR .021
+#define CA_AMT 1.024
+
 float4 pixel_shader_extension(PS_INPUT input, float4 color) {
 
 	const int BLUR_SAMPLE_RADIUS_PIXELS = 5;
@@ -54,11 +58,35 @@ float4 pixel_shader_extension(PS_INPUT input, float4 color) {
 	            total_bloom += bloom;
 	            total_weight += 1.0;
             }
-            
         }
     }
 
     total_bloom /= total_weight;
 
-	return color + total_bloom;
+	color = color + total_bloom;
+
+    float2 fragCoord = input.uv * window_size;
+    float2 uv = fragCoord / window_size;
+
+    // Curvature distortion
+    float2 crtUV = uv * 2.0 - 1.0;
+    float2 offset = crtUV.yx / CURVATURE;
+    crtUV += crtUV * offset * offset;
+    crtUV = crtUV * 0.5 + 0.5;
+
+    float2 edge = smoothstep(0.0, BLUR, crtUV) * (1.0 - smoothstep(1.0 - BLUR, 1.0, crtUV));
+
+    // Chromatic Aberration
+    color.rgb = float3(
+        bloom_map.Sample(image_sampler_1, (crtUV - 0.5) * CA_AMT + 0.5).r,
+        bloom_map.Sample(image_sampler_1, crtUV).g,
+        bloom_map.Sample(image_sampler_1, (crtUV - 0.5) / CA_AMT + 0.5).b
+    ) * edge.x * edge.y;
+
+    // Scanlines
+    if (fmod(fragCoord.y, 2.0) < 1.0) color.rgb *= 0.7;
+    else if (fmod(fragCoord.x, 3.0) < 1.0) color.rgb *= 0.7;
+    else color *= 1.2;
+
+    return color;
 }
